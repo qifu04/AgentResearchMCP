@@ -1,0 +1,318 @@
+- generic [ref=e4]:
+  - banner [ref=e5]:
+    - link "Skip to main content" [ref=e6] [cursor=pointer]:
+      - /url: "#skip1"
+    - banner [ref=e9]:
+      - generic [ref=e11]:
+        - generic [ref=e12]:
+          - link "Elsevier 徽标" [ref=e13] [cursor=pointer]:
+            - /url: /home.uri?zone=header&origin=searchadvanced
+            - img [ref=e16]
+            - generic [ref=e18]: Elsevier 徽标
+          - link "Scopus 徽标" [ref=e19] [cursor=pointer]:
+            - /url: /home.uri?zone=header&origin=searchadvanced
+            - img [ref=e22]
+            - generic [ref=e30]: Scopus 徽标
+        - generic [ref=e31]:
+          - generic [ref=e32]:
+            - link "检索" [ref=e33] [cursor=pointer]:
+              - /url: /pages/home
+              - img [ref=e35]
+              - generic [ref=e37]: 检索
+            - link "来源出版物" [ref=e38] [cursor=pointer]:
+              - /url: /sources.uri?zone=TopNavBar&origin=searchadvanced
+            - link "SciVal （在新窗口中打开）" [ref=e39] [cursor=pointer]:
+              - /url: https://www.scival.com/home?dgcid=ScopusHeader&adobe_mc=MCORGID%3D4D6368F454EC41940A4C98A6%2540AdobeOrg%7CTS%3D1773325775
+              - generic [ref=e40]:
+                - text: SciVal
+                - img [ref=e42]
+              - generic [ref=e44]: （在新窗口中打开）
+          - generic [ref=e46]:
+            - link "我们能提供什么帮助？" [ref=e48] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e50]
+              - generic [ref=e52]: 我们能提供什么帮助？
+            - link "通知" [ref=e53] [cursor=pointer]:
+              - /url: /alert/form/MyAlerts.uri?&origin=searchadvanced&zone=TopNavBar
+              - img [ref=e55]
+              - generic [ref=e57]: 通知
+            - link "提供机构" [ref=e59] [cursor=pointer]:
+              - /url: "#"
+              - img [ref=e61]
+              - generic [ref=e63]: 提供机构
+            - link "User initials QZ 用户菜单" [ref=e65] [cursor=pointer]:
+              - /url: "#"
+              - generic [ref=e67]:
+                - generic [ref=e68]: User initials
+                - generic [ref=e69]: QZ
+              - generic [ref=e70]: 用户菜单
+    - text: ❓ ␡
+  - generic [ref=e72]:
+    - generic:
+      - banner:
+        - heading "高级搜索 比较来源出版物" [level=1] [ref=e73]:
+          - generic [ref=e74]: 高级搜索
+          - list [ref=e75]:
+            - listitem [ref=e76]:
+              - link "比较来源出版物" [ref=e77] [cursor=pointer]:
+                - /url: /source/eval/handle.uri?navbar=t&origin=searchadvanced&zone=TopNavBar
+                - text: 比较来源出版物
+                - generic [ref=e78]: ▻
+  - main [ref=e81]:
+    - generic [ref=e86]:
+      - generic [ref=e89]:
+        - generic [ref=e90]:
+          - link "基本检索" [ref=e91] [cursor=pointer]:
+            - /url: javascript:advancedFormSubmit('basic');
+            - generic [ref=e92]: ◅
+            - text: 基本检索
+          - list [ref=e93]:
+            - listitem [ref=e94]:
+              - link "高级" [ref=e95] [cursor=pointer]:
+                - /url: javascript:void(0);
+            - listitem [ref=e96]:
+              - link "检索提示" [ref=e97] [cursor=pointer]:
+                - /url: /standard/help.uri?topic=11365&anchor=tips
+                - generic [ref=e98]: 检索提示
+                - generic [ref=e99]: ❓
+        - generic [ref=e102]:
+          - generic [ref=e104]:
+            - generic [ref=e105] [cursor=pointer]: 输入检索式字符串
+            - textbox "输入检索式字符串" [ref=e106]
+          - list [ref=e108]:
+            - listitem [ref=e109]:
+              - button "大纲检索式" [ref=e110] [cursor=pointer]
+            - listitem [ref=e111]:
+              - link "添加作者姓名/归属机构" [ref=e112] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e113]:
+              - link "清除表单" [ref=e114] [cursor=pointer]:
+                - /url: "#"
+            - listitem [ref=e115]:
+              - button "检索" [ref=e116] [cursor=pointer]:
+                - generic [ref=e117]: 检索
+                - generic [ref=e118]: 🔎
+          - region "Help Content" [ref=e121]:
+            - paragraph [ref=e122]:
+              - text: ALL("Cognitive architectures") AND AUTHOR-NAME(smith)
+              - text: TITLE-ABS-KEY(*somatic complaint wom?n) AND PUBYEAR AFT 1993
+              - text: SRCTITLE(*field ornith*) AND VOLUME(75) AND ISSUE(1) AND PAGES(53-66)
+      - generic [ref=e123]:
+        - generic [ref=e124]:
+          - heading "运算符" [level=2] [ref=e125]
+          - list [ref=e126]:
+            - listitem [ref=e127]:
+              - button "AND" [ref=e128] [cursor=pointer]:
+                - generic [ref=e129]: AND
+              - button "+" [ref=e130] [cursor=pointer]:
+                - generic [ref=e131]: +
+            - listitem [ref=e132]:
+              - button "OR" [ref=e133] [cursor=pointer]:
+                - generic [ref=e134]: OR
+              - button "+" [ref=e135] [cursor=pointer]:
+                - generic [ref=e136]: +
+            - listitem [ref=e137]:
+              - button "AND NOT" [ref=e138] [cursor=pointer]:
+                - generic [ref=e139]: AND NOT
+              - button "+" [ref=e140] [cursor=pointer]:
+                - generic [ref=e141]: +
+            - listitem [ref=e142]:
+              - button "PRE/" [ref=e143] [cursor=pointer]:
+                - generic [ref=e144]: PRE/
+              - button "+" [ref=e145] [cursor=pointer]:
+                - generic [ref=e146]: +
+            - listitem [ref=e147]:
+              - button "W/" [ref=e148] [cursor=pointer]:
+                - generic [ref=e149]: W/
+              - button "+" [ref=e150] [cursor=pointer]:
+                - generic [ref=e151]: +
+        - generic [ref=e152]:
+          - heading "字段代码" [level=2] [ref=e153]:
+            - text: 字段代码
+            - link "详细了解字段代码 (在新窗口中打开)" [ref=e154] [cursor=pointer]:
+              - /url: /standard/help.uri?topic=11236&anchor=tips
+              - generic [ref=e155]: ❓
+          - generic [ref=e156]:
+            - list [ref=e157]:
+              - listitem [ref=e158]:
+                - button "文本内容" [ref=e159] [cursor=pointer]:
+                  - generic [ref=e160]: 文本内容
+                  - generic [ref=e161]: 
+                - text: + + + + + +
+            - list [ref=e162]:
+              - listitem [ref=e163]:
+                - button "归属机构" [ref=e164] [cursor=pointer]:
+                  - generic [ref=e165]: 归属机构
+                  - generic [ref=e166]: 
+                - text: + + + + +
+            - list [ref=e167]:
+              - listitem [ref=e168]:
+                - button "作者" [ref=e169] [cursor=pointer]:
+                  - generic [ref=e170]: 作者
+                  - generic [ref=e171]: 
+                - text: + + + + + + +
+            - list [ref=e172]:
+              - listitem [ref=e173]:
+                - button "生物实体" [ref=e174] [cursor=pointer]:
+                  - generic [ref=e175]: 生物实体
+                  - generic [ref=e176]: 
+                - text: + +
+            - list [ref=e177]:
+              - listitem [ref=e178]:
+                - button "化学实体" [ref=e179] [cursor=pointer]:
+                  - generic [ref=e180]: 化学实体
+                  - generic [ref=e181]: 
+                - text: + + +
+            - list [ref=e182]:
+              - listitem [ref=e183]:
+                - button "会议" [ref=e184] [cursor=pointer]:
+                  - generic [ref=e185]: 会议
+                  - generic [ref=e186]: 
+                - text: + + + +
+            - list [ref=e187]:
+              - listitem [ref=e188]:
+                - button "文献" [ref=e189] [cursor=pointer]:
+                  - generic [ref=e190]: 文献
+                  - generic [ref=e191]: 
+                - text: + + + + + + + + + + +
+            - list [ref=e192]:
+              - listitem [ref=e193]:
+                - button "编者" [ref=e194] [cursor=pointer]:
+                  - generic [ref=e195]: 编者
+                  - generic [ref=e196]: 
+                - text: +
+            - list [ref=e197]:
+              - listitem [ref=e198]:
+                - button "资金资助" [ref=e199] [cursor=pointer]:
+                  - generic [ref=e200]: 资金资助
+                  - generic [ref=e201]: 
+                - text: + + + +
+            - list [ref=e202]:
+              - listitem [ref=e203]:
+                - button "关键字" [ref=e204] [cursor=pointer]:
+                  - generic [ref=e205]: 关键字
+                  - generic [ref=e206]: 
+                - text: + + + + +
+            - list [ref=e207]:
+              - listitem [ref=e208]:
+                - button "出版物" [ref=e209] [cursor=pointer]:
+                  - generic [ref=e210]: 出版物
+                  - generic [ref=e211]: 
+                - text: + + + + + + + + + + + + + + + + +
+            - list [ref=e212]:
+              - listitem [ref=e213]:
+                - button "参考文献" [ref=e214] [cursor=pointer]:
+                  - generic [ref=e215]: 参考文献
+                  - generic [ref=e216]: 
+                - text: + + + + + + + + +
+            - list [ref=e217]:
+              - listitem [ref=e218]:
+                - button "学科领域" [ref=e219] [cursor=pointer]:
+                  - generic [ref=e220]: 学科领域
+                  - generic [ref=e221]: 
+                - text:  + + + + + +  + + + + + +  + + + + + + + + + + +  + + + + + + +
+          - text:  + ␡
+  - contentinfo [ref=e224]:
+    - generic [ref=e227]:
+      - generic [ref=e228]:
+        - heading "关于 Scopus" [level=3] [ref=e229]
+        - list [ref=e230]:
+          - listitem [ref=e231]:
+            - link "什么是 Scopus 详细了解 Scopus (在新窗口中打开)" [ref=e232] [cursor=pointer]:
+              - /url: https://www.elsevier.com/products/scopus?dgcid=RN_AGCM_Sourced_300005030
+              - generic [ref=e233]: 什么是 Scopus
+              - generic [ref=e234]: 详细了解 Scopus (在新窗口中打开)
+          - listitem [ref=e235]:
+            - link "内容涵盖范围 详细了解 Scopus 内容涵盖范围 (在新窗口中打开)" [ref=e236] [cursor=pointer]:
+              - /url: https://www.elsevier.com/products/scopus/content?dgcid=RN_AGCM_Sourced_300005030
+              - generic [ref=e237]: 内容涵盖范围
+              - generic [ref=e238]: 详细了解 Scopus 内容涵盖范围 (在新窗口中打开)
+          - listitem [ref=e239]:
+            - link "Scopus 博客 阅读 Scopus 博客 (在新窗口中打开)" [ref=e240] [cursor=pointer]:
+              - /url: https://blog.scopus.com/
+              - generic [ref=e241]: Scopus 博客
+              - generic [ref=e242]: 阅读 Scopus 博客 (在新窗口中打开)
+          - listitem [ref=e243]:
+            - link "Scopus API 详细了解 Scopus API' (在新窗口中打开)" [ref=e244] [cursor=pointer]:
+              - /url: https://dev.elsevier.com/
+              - generic [ref=e245]: Scopus API
+              - generic [ref=e246]: 详细了解 Scopus API' (在新窗口中打开)
+          - listitem [ref=e247]:
+            - link "隐私事项 查看隐私事项页面 (在新窗口中打开)" [ref=e248] [cursor=pointer]:
+              - /url: https://www.elsevier.com/legal/privacy-policy?dgcid=RN_AGCM_Sourced_300005030
+              - generic [ref=e249]: 隐私事项
+              - generic [ref=e250]: 查看隐私事项页面 (在新窗口中打开)
+      - generic [ref=e251]:
+        - heading "语言" [level=3] [ref=e252]
+        - list [ref=e253]:
+          - listitem [ref=e254]:
+            - link "Switch to English Switch to English" [ref=e255] [cursor=pointer]:
+              - /url: /personalization/switch/English.uri?origin=searchadvanced&zone=footer&locale=en_US
+              - generic [ref=e256]: Switch to English
+              - generic [ref=e257]: Switch to English
+          - listitem [ref=e258]:
+            - link "日本語版を表示する 日本語版を表示する" [ref=e259] [cursor=pointer]:
+              - /url: /personalization/switch/Japanese.uri?origin=searchadvanced&zone=footer&locale=ja_JP
+              - generic [ref=e260]: 日本語版を表示する
+              - generic [ref=e261]: 日本語版を表示する
+          - listitem [ref=e262]:
+            - link "查看繁體中文版本 查看繁體中文版本" [ref=e263] [cursor=pointer]:
+              - /url: /personalization/switch/Chinese.uri?origin=searchadvanced&zone=footer&locale=zh_TW
+              - generic [ref=e264]: 查看繁體中文版本
+              - generic [ref=e265]: 查看繁體中文版本
+          - listitem [ref=e266]:
+            - link "Просмотр версии на русском языке Просмотр версии на русском языке" [ref=e267] [cursor=pointer]:
+              - /url: /personalization/switch/Russian.uri?origin=searchadvanced&zone=footer&locale=ru_RU
+              - generic [ref=e268]: Просмотр версии на русском языке
+              - generic [ref=e269]: Просмотр версии на русском языке
+      - generic [ref=e270]:
+        - heading "客户服务" [level=3] [ref=e271]
+        - list [ref=e272]:
+          - listitem [ref=e273]:
+            - link "帮助 查看 Scopus 帮助文件 (在新窗口中打开)" [ref=e274] [cursor=pointer]:
+              - /url: /standard/contactUs.uri?pageOrigin=footer
+              - generic [ref=e275]: 帮助
+              - generic [ref=e276]: 查看 Scopus 帮助文件 (在新窗口中打开)
+          - listitem [ref=e277]:
+            - link "教程 选择以查看教程 (在新窗口中打开)" [ref=e278] [cursor=pointer]:
+              - /url: https://cn.service.elsevier.com/app/answers/detail/a_id/16188/supporthub/scopus
+              - generic [ref=e279]: 教程
+              - generic [ref=e280]: 选择以查看教程 (在新窗口中打开)
+          - listitem [ref=e281]:
+            - link "联系我们 联系我们 (在新窗口中打开)" [ref=e282] [cursor=pointer]:
+              - /url: https://cn.service.elsevier.com/app/overview/scopus/
+              - generic [ref=e283]: 联系我们
+              - generic [ref=e284]: 联系我们 (在新窗口中打开)
+    - separator [ref=e285]
+    - generic [ref=e287]:
+      - link "Elsevier 转到 Elsevier 主页 (在新窗口中打开)" [ref=e288] [cursor=pointer]:
+        - /url: https://www.elsevier.com/?dgcid=RN_AGCM_Sourced_300005030
+        - img "Elsevier" [ref=e290]
+        - generic [ref=e291]: 转到 Elsevier 主页 (在新窗口中打开)
+      - generic [ref=e292]:
+        - generic [ref=e293]:
+          - link "条款与条件 查看 Elsevier 的条款与条件（在新窗口中打开）" [ref=e294] [cursor=pointer]:
+            - /url: https://www.elsevier.com/legal/elsevier-website-terms-and-conditions?dgcid=RN_AGCM_Sourced_300005030
+            - generic [ref=e295]:
+              - text: 条款与条件
+              - img [ref=e297]
+            - generic [ref=e299]: 查看 Elsevier 的条款与条件（在新窗口中打开）
+          - link "隐私策略 查看 Elsevier 隐私政策（在新窗口中打开）" [ref=e300] [cursor=pointer]:
+            - /url: https://www.elsevier.com/legal/privacy-policy?dgcid=RN_AGCM_Sourced_300005030
+            - generic [ref=e301]:
+              - text: 隐私策略
+              - img [ref=e303]
+            - generic [ref=e305]: 查看 Elsevier 隐私政策（在新窗口中打开）
+        - generic [ref=e307]:
+          - text: 本网站中的所有内容：版权所有 © 2026
+          - link "Elsevier B.V. 转到 Elsevier 主页 (在新窗口中打开)" [ref=e308] [cursor=pointer]:
+            - /url: https://www.elsevier.com?dgcid=RN_AGCM_Sourced_300005030
+            - generic [ref=e309]:
+              - text: Elsevier B.V.
+              - img [ref=e311]
+            - generic [ref=e313]: 转到 Elsevier 主页 (在新窗口中打开)
+          - text: 、其许可人和贡献者。保留所有权利，包括文本和数据挖掘、AI 训练和类似技术的权利。对于所有开放获取的内容，则适用相关许可条款。
+      - link "RELX 集团 转至 RELX 集团首页（在新窗口中打开）" [ref=e315] [cursor=pointer]:
+        - /url: http://www.relx.com
+        - img "RELX 集团" [ref=e316]
+        - generic [ref=e317]: 转至 RELX 集团首页（在新窗口中打开）

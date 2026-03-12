@@ -1,0 +1,76 @@
+Total messages: 56 (Errors: 29, Warnings: 6)
+Returning 50 messages for level "info"
+
+[LOG] None logged in user: need to login for save to work. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[WARNING] Variant legacy only supports one fixed size currently. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[WARNING] Variant legacy only supports one fixed size currently. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[LOG] Page report :: https://rum.scopus.com/pageReport?cpc=SC&pagetype=searchadvanced&sdsh=-408283146&tidh=912577378&href=https%3A%2F%2Fwww.scopus.com%2Fsearch%2Fform.uri%3Fdisplay%3Dadvanced&navigationStart=1773325535395&unloadEventStart=1773325536821&unloadEventEnd=1773325536822&redirectStart=0&redirectEnd=0&fetchStart=1773325535396&domainLookupStart=1773325535396&domainLookupEnd=1773325535780&connectStart=1773325535780&connectEnd=1773325536160&secureConnectionStart=1773325535969&requestStart=1773325536160&responseStart=1773325536809&responseEnd=1773325536855&domLoading=1773325536824&domInteractive=1773325536937&domContentLoadedEventStart=1773325536982&domContentLoadedEventEnd=1773325536996&domComplete=1773325537146&loadEventStart=1773325537146&loadEventEnd=1773325537156&msFirstPaint=1773325537030 @ https://www.scopus.com/search/form.uri?display=advanced:9
+[ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://rum.scopus.com/idx?cpc=SC&pagetype=searchadvanced&sds=f44607d0df9f9d3f22b52a6c0c73da1413bdd56a94400d1a5fccab0fc3783991ab1335dd8dee4be763ca9d11473d425b&tid=EAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210:16&sdsh=-408283146&tidh=912577378&winHeight=575&winWidth=1021&domCount=1126:0
+[ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://rum.scopus.com/pageReport?cpc=SC&pagetype=searchadvanced&sdsh=-408283146&tidh=912577378&href=https%3A%2F%2Fwww.scopus.com%2Fsearch%2Fform.uri%3Fdisplay%3Dadvanced&navigationStart=1773325535395&unloadEventStart=1773325536821&unloadEventEnd=1773325536822&redirectStart=0&redirectEnd=0&fetchStart=1773325535396&domainLookupStart=1773325535396&domainLookupEnd=1773325535780&connectStart=1773325535780&connectEnd=1773325536160&secureConnectionStart=1773325535969&requestStart=1773325536160&responseStart=1773325536809&responseEnd=1773325536855&domLoading=1773325536824&domInteractive=1773325536937&domContentLoadedEventStart=1773325536982&domContentLoadedEventEnd=1773325536996&domComplete=1773325537146&loadEventStart=1773325537146&loadEventEnd=1773325537156&msFirstPaint=1773325537030:0
+[ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://rum.scopus.com/timers?pcr=1773325543584&cpc=SC&pagetype=searchadvanced&sdsh=-408283146&tidh=912577378&navigationStart=1773325535395:0
+[INFO] Slow network is detected. See https://www.chromestatus.com/feature/5636954674692096 for more details. Fallback font will be used while loading: https://id.elsevier.com/assets/fonts/nexussanswebpro/NexusSansWebPro.woff @ https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:561
+[LOG] Chrome @ https://id.elsevier.com/assets/js/wayf.js:18
+[LOG] SA Discovery API Meta Information >> 
+SA API Toggle:: false 
+hostURL::  
+context::  @ https://id.elsevier.com/assets/js/SA.js:28
+[LOG]  ignoring SA Entity reading as toggle is disabled @ https://id.elsevier.com/assets/js/SA.js:55
+[ERROR] resultList is null or empty @ https://id.elsevier.com/assets/js/wayf.js:100
+[ERROR] resultList is null or empty @ https://id.elsevier.com/assets/js/wayf.js:100
+[ERROR] resultList is null or empty @ https://id.elsevier.com/assets/js/wayf.js:100
+[ERROR] resultList is null or empty @ https://id.elsevier.com/assets/js/wayf.js:100
+[ERROR] resultList is null or empty @ https://id.elsevier.com/assets/js/wayf.js:100
+[LOG] Event autoSuggestTermClicked for index 1 @ https://id.elsevier.com/assets/js/analytics.js:45
+[ERROR] Failed to load resource: the server responded with a status of 500 () @ https://auth.elsevier.com/favicon.ico:0
+[ERROR] Failed to load resource: the server responded with a status of 404 (Not Found) @ https://idp.pku.edu.cn/favicon.ico:0
+[LOG] JQMIGRATE: Migrate is installed, version 3.4.0 @ https://iaaa.pku.edu.cn/iaaa/resources/javascript/jquery-migrate-3.4.0.min.js:1
+[VERBOSE] [DOM] Input elements should have autocomplete attributes (suggested: "current-password"): (More info: https://goo.gl/9p2vKq) %o @ https://iaaa.pku.edu.cn/iaaa/oauth.jsp?appID=zygxfw&redirectUrl=https%3A%2F%2Fidp.pku.edu.cn%2Fidp%2FAuthn%2FExternal%3Fconversation%3De1s2:0
+[WARNING] The specified value "ææºä»¤ç" cannot be parsed, or is out of range. @ https://iaaa.pku.edu.cn/iaaa/resources/javascript/jquery-3.7.0.min.js:1
+[LOG] test:true @ https://iaaa.pku.edu.cn/iaaa/resources/javascript/OAuthLogin.js?_v=20251215:162
+[ERROR] Failed to load resource: the server responded with a status of 400 () @ https://auth.elsevier.com/favicon.ico:0
+[LOG] Persisting entity $SA_CONTENT_ENTITY @ https://id.elsevier.com/assets/js/SA.js:16
+[LOG] SA Persistance API Meta Information >> 
+SA API Toggle:: false 
+hostURL::  
+context::  @ https://id.elsevier.com/assets/js/SA.js:83
+[LOG]  ignoring SA Entity reading as toggle is disabled @ https://id.elsevier.com/assets/js/SA.js:105
+[LOG] closing form  @ https://id.elsevier.com/assets/js/SA.js:73
+[WARNING] Variant legacy only supports one fixed size currently. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[WARNING] Variant legacy only supports one fixed size currently. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[WARNING] Variant legacy only supports one fixed size currently. @ https://www.scopus.com/search/form.uri?display=advanced:9
+[ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://rum.scopus.com/idx?cpc=SC&pagetype=searchadvanced&sds=f44607d0df9f9d3f22b52a6c0c73da1413bdd56a94400d1a5fccab0fc3783991ab1335dd8dee4be763ca9d11473d425b&tid=EAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210:19&sdsh=-408283146&tidh=912577381&winHeight=1200&winWidth=1425&domCount=1131:0
+[LOG] Page report :: https://rum.scopus.com/pageReport?cpc=SC&pagetype=searchadvanced&sdsh=-408283146&tidh=912577381&href=https%3A%2F%2Fwww.scopus.com%2Fsearch%2Fform.uri%3Fdisplay%3Dadvanced&navigationStart=1773325772361&unloadEventStart=0&unloadEventEnd=0&redirectStart=0&redirectEnd=0&fetchStart=1773325773517&domainLookupStart=1773325773517&domainLookupEnd=1773325773517&connectStart=1773325773517&connectEnd=1773325773517&secureConnectionStart=0&requestStart=1773325773519&responseStart=1773325773976&responseEnd=1773325774021&domLoading=1773325773986&domInteractive=1773325774128&domContentLoadedEventStart=1773325774158&domContentLoadedEventEnd=1773325774169&domComplete=1773325774302&loadEventStart=1773325774302&loadEventEnd=1773325774309&msFirstPaint=1773325774137 @ https://www.scopus.com/search/form.uri?display=advanced:9
+[ERROR] Failed to load resource: net::ERR_NAME_NOT_RESOLVED @ https://rum.scopus.com/pageReport?cpc=SC&pagetype=searchadvanced&sdsh=-408283146&tidh=912577381&href=https%3A%2F%2Fwww.scopus.com%2Fsearch%2Fform.uri%3Fdisplay%3Dadvanced&navigationStart=1773325772361&unloadEventStart=0&unloadEventEnd=0&redirectStart=0&redirectEnd=0&fetchStart=1773325773517&domainLookupStart=1773325773517&domainLookupEnd=1773325773517&connectStart=1773325773517&connectEnd=1773325773517&secureConnectionStart=0&requestStart=1773325773519&responseStart=1773325773976&responseEnd=1773325774021&domLoading=1773325773986&domInteractive=1773325774128&domContentLoadedEventStart=1773325774158&domContentLoadedEventEnd=1773325774169&domComplete=1773325774302&loadEventStart=1773325774302&loadEventEnd=1773325774309&msFirstPaint=1773325774137:0
+TypeError: Cannot read properties of null (reading 'addEventListener')
+    at https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:289:37
+ReferenceError: pageDataTracker is not defined
+    at HTMLDocument.<anonymous> (https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:199:3)
+ReferenceError: $includeAutoDismissalRedirectScript is not defined
+    at propagateAutodissmisal (https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:218:3)
+TypeError: Cannot read properties of null (reading 'addEventListener')
+    at https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:289:37
+ReferenceError: pageDataTracker is not defined
+    at HTMLDocument.<anonymous> (https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:199:3)
+ReferenceError: $includeAutoDismissalRedirectScript is not defined
+    at propagateAutodissmisal (https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:218:3)
+TypeError: Cannot read properties of null (reading 'addEventListener')
+    at https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:289:37
+ReferenceError: pageDataTracker is not defined
+    at HTMLDocument.<anonymous> (https://id.elsevier.com/as/authorization.oauth2?platSite=SC%2Fscopus&ui_locales=zh-CN&scope=openid+profile+email+els_auth_info+els_analytics_info+urn%3Acom%3Aelsevier%3Aidp%3Apolicy%3Aproduct%3Aindv_identity&els_policy=idp_policy_indv_identity_plus&response_type=code&redirect_uri=https%3A%2F%2Fwww.scopus.com%2Fauthredirect.uri%3FtxGid%3D723517f35b47f373751dc380605bb503&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17&authType=SINGLE_SIGN_IN&prompt=login&client_id=SCOPUS:199:3)
+TypeError: Cannot read properties of null (reading 'offsetHeight')
+    at https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping?client_id=SCOPUS&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17:182:39
+TypeError: Cannot read properties of null (reading 'addEventListener')
+    at https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping?client_id=SCOPUS&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17:379:37
+ReferenceError: pageDataTracker is not defined
+    at HTMLDocument.<anonymous> (https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping?client_id=SCOPUS&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17:289:3)
+ReferenceError: $includeAutoDismissalRedirectScript is not defined
+    at propagateAutodissmisal (https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping?client_id=SCOPUS&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17:308:3)
+TypeError: Cannot read properties of undefined (reading 'trackEvent')
+    at autoSuggestTermClickedInstitute (https://id.elsevier.com/assets/js/analytics.js:48:25)
+    at HTMLButtonElement.onclick (https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping?client_id=SCOPUS&state=userLogin%7CtxId%3DEAADFA0C36AF48B4011959845B7341C4.i-08fb296887da59210%3A17:1:1)
+ReferenceError: pageDataTracker is not defined
+    at https://auth.elsevier.com/ShibAuth/institutionLogin?entityID=https://idp.pku.edu.cn/idp/shibboleth&appReturnURL=https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping&oneTrust=false:77:2
+ReferenceError: pageDataTracker is not defined
+    at https://auth.elsevier.com/ShibAuth/deliverInstCredentials:218:2
+ReferenceError: pageDataTracker is not defined
+    at HTMLDocument.<anonymous> (https://id.elsevier.com/as/On3IQjUROL/resume/as/authorization.ping:175:3)
