@@ -78,8 +78,12 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
       const fromUrl = url.searchParams.get(this.queryParamName);
       if (fromUrl) return fromUrl;
     }
-    const input = await this.findQueryInput(context);
-    return normalizeWhitespace(await input.inputValue());
+    try {
+      const input = await this.findQueryInput(context);
+      return normalizeWhitespace(await input.inputValue());
+    } catch {
+      return null;
+    }
   }
 
   async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
@@ -112,12 +116,14 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     const filterGroupSelectors = this.selectors.filterGroups;
     const filters = await context.page.evaluate(
       (groupSelectors: string[]) => {
+        const seen = new Set<Element>();
         const groups: Element[] = [];
         for (const selector of groupSelectors) {
-          const nodes = Array.from(document.querySelectorAll(selector));
-          if (nodes.length > 0) {
-            groups.push(...nodes);
-            break;
+          for (const node of Array.from(document.querySelectorAll(selector))) {
+            if (!seen.has(node)) {
+              seen.add(node);
+              groups.push(node);
+            }
           }
         }
         return groups.slice(0, 20).map((group, index) => {
@@ -125,11 +131,11 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
             group.querySelector("h2, h3, h4, legend, button, [role='button']")?.textContent?.trim() ??
             group.textContent?.trim()?.slice(0, 80) ??
             `group-${index + 1}`;
-          const options = Array.from(group.querySelectorAll('label, [role="checkbox"]'))
+          const options = Array.from(group.querySelectorAll('label, [role="checkbox"], [role="option"]'))
             .map((option) => option.textContent?.trim())
-            .filter(Boolean)
+            .filter((text): text is string => Boolean(text) && text.length > 1)
             .slice(0, 10)
-            .map((value) => ({ value: value as string, label: value as string }));
+            .map((value) => ({ value, label: value }));
           return { key: label, label, type: "checkbox", options };
         });
       },

@@ -112,10 +112,13 @@ export class SessionManager {
     }
 
     await this.setPhase(sessionId, "starting");
-    const userDataDir =
-      session.record.persistentProfile
-        ? await this.profileStore.ensureProfileDir(session.record.provider, session.record.profileKey)
-        : null;
+
+    let userDataDir: string | null = null;
+    if (session.record.persistentProfile) {
+      // Acquire exclusive lock before launching browser with this profile
+      this.profileStore.acquireProfileLock(session.record.provider, session.record.profileKey, sessionId);
+      userDataDir = await this.profileStore.ensureProfileDir(session.record.provider, session.record.profileKey);
+    }
 
     session.runtime = await this.playwrightFactory.createRuntime({
       viewport: session.record.viewport ?? undefined,
@@ -147,6 +150,12 @@ export class SessionManager {
     const session = await this.requireSession(sessionId);
     await this.playwrightFactory.closeRuntime(session.runtime);
     session.runtime = undefined;
+
+    // Release profile lock if this session held one
+    if (session.record.persistentProfile) {
+      this.profileStore.releaseProfileLock(session.record.provider, session.record.profileKey, sessionId);
+    }
+
     await this.setPhase(sessionId, "closed");
     return session;
   }
