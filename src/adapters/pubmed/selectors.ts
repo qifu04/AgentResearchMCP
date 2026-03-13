@@ -1,4 +1,4 @@
-import type { AdapterSelectors } from "../base/adapter-selectors.js";
+﻿import type { AdapterSelectors } from "../base/adapter-selectors.js";
 
 export const pubmedSelectors: AdapterSelectors = {
   queryInputs: [
@@ -17,10 +17,10 @@ export const pubmedSelectors: AdapterSelectors = {
     "article",
   ],
   filterGroups: [
-    "aside section",
-    "fieldset",
-    ".search-settings",
-    ".facet-filter-set",
+    "#static-filters .form-field.filters-field",
+    "#static-filters .choice-group",
+    "#static-filters .usa-accordion-content .choice-group",
+    "#static-filters .timeline-filter",
   ],
   sendToButtons: [
     "#more-actions-trigger",

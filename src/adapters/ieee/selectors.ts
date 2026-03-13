@@ -1,8 +1,9 @@
-import type { AdapterSelectors } from "../base/adapter-selectors.js";
+﻿import type { AdapterSelectors } from "../base/adapter-selectors.js";
 
 export const ieeeSelectors: AdapterSelectors = {
-  queryInputs: ['input[name="queryText"]', 'input[type="search"]', 'input[type="text"]'],
-  searchButtons: ['button:has-text("Search")', 'button[type="submit"]'],
-  resultCards: ['.List-results-items', '.search-results-item', 'article'],
-  filterGroups: ['aside section', '.filter', '.accordion'],
+  queryInputs: ['form[name="adv-search-form"] input[aria-label="Search Term"]'],
+  searchButtons: ['form[name="adv-search-form"] button.stats-Adv_search'],
+  resultCards: ["xpl-results-item"],
+  filterGroups: ["xpl-facets li.refinement-section"],
+  exportButtons: ["xpl-export-search-results > button.xpl-btn-primary"],
 };

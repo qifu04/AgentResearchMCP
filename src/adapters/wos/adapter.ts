@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import type { Locator } from "playwright";
 import type {
   ExportCapability,
@@ -11,7 +11,7 @@ import type {
   ResultItem,
   SearchSummary,
 } from "../provider-contract.js";
-import { clickIfVisible, fillAndVerify, normalizeWhitespace, runWithPageLoad, textContentOrNull } from "../../browser/page-helpers.js";
+import { clickIfVisible, fillAndVerify, normalizeWhitespace, readLocatorValue, runWithPageLoad, textContentOrNull } from "../../browser/page-helpers.js";
 import { ManualInterventionRequiredError } from "../../core/manual-intervention.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
 import { escapeRegExp } from "../base/adapter-utils.js";
@@ -28,6 +28,7 @@ import {
   type WosSearchButtonCandidate,
 } from "./search-button-targeting.js";
 import { wosFilterKeyToLabel, wosSelectors } from "./selectors.js";
+import { extractWosQueryId, parseWosSearchSummary, parseWosStoredQuery } from "./search-parsing.js";
 
 export class WosAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = wosDescriptor;
@@ -87,11 +88,26 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   override async readCurrentQuery(context: ProviderContext): Promise<string | null> {
-    const queryBox = await this.findQueryPreview(context);
-    return normalizeWhitespace(await queryBox.inputValue());
+    if (/\/summary\//.test(context.page.url())) {
+      const storedQuery = await this.readStoredQuery(context);
+      if (storedQuery) {
+        return storedQuery;
+      }
+    }
+
+    const queryBox = await this.findQueryPreview(context).catch(() => null);
+    if (!queryBox) {
+      return null;
+    }
+
+    return readLocatorValue(queryBox);
   }
 
   override async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
+    if (/\/summary\//.test(context.page.url())) {
+      await this.openAdvancedSearch(context);
+    }
+
     await this.ensureQueryBuilderVisible(context);
     await runWithPageLoad(context.page, async () => {
       const queryBox = await this.findQueryPreview(context);
@@ -113,28 +129,41 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   async readSearchSummary(context: ProviderContext): Promise<SearchSummary> {
-    const info = await context.page.evaluate(() => ({
-      title: document.title,
-      url: location.href,
-      bodyText: document.body.innerText,
-    }));
-    const queryId = /\/summary\/([^/]+)/.exec(info.url)?.[1] ?? null;
-    const totalResults = parseNumber(info.bodyText);
-    const currentPage = /\/summary\/[^/]+\/[^/]+\/(\d+)/.exec(info.url)?.[1];
-    const totalPages = extractPageCount(info.bodyText);
-    const query = info.title.split(" - ")[0]?.trim() || (await this.readCurrentQuery(context)) || "";
+    const storedQuery = await this.readStoredQuery(context);
+    const info = await context.page.evaluate(() => {
+      const paginationText =
+        Array.from(document.querySelectorAll("button, span, div"))
+          .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+          .find((text) => /\bPage\s+\d+\s+of\s+[\d,]+\b/i.test(text)) ?? null;
+
+      return {
+        title: document.title,
+        url: location.href,
+        paginationText,
+        bodyText: document.body.innerText,
+      };
+    });
+    const parsed = parseWosSearchSummary({
+      url: info.url,
+      title: info.title,
+      paginationText: info.paginationText,
+      currentQuery: storedQuery,
+    });
 
     return {
       provider: "wos",
-      query,
-      totalResultsText: totalResults ? totalResults.toLocaleString("en-US") : null,
-      totalResults,
-      currentPage: currentPage ? Number(currentPage) : 1,
-      totalPages,
+      query: parsed.query ?? "",
+      totalResultsText: parsed.totalResultsText,
+      totalResults: parsed.totalResults,
+      currentPage: parsed.currentPage ?? 1,
+      totalPages: parsed.totalPages,
       pageSize: 50,
-      queryId,
+      queryId: extractWosQueryId(info.url),
       sort: /\/summary\/[^/]+\/([^/]+)\//.exec(info.url)?.[1] ?? "relevance",
-      raw: info,
+      raw: {
+        ...info,
+        storedQuery,
+      },
     };
   }
 
@@ -180,21 +209,30 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   override async listFilters(context: ProviderContext): Promise<FilterGroup[]> {
     const filters = await context.page.evaluate(() => {
-      const groups = Array.from(document.querySelectorAll('[role="group"], aside section, mat-expansion-panel'));
-      return groups.slice(0, 20).map((group, index) => {
-        const label =
-          group.querySelector("h2, h3, h4, button, [role='button']")?.textContent?.trim() ??
-          group.textContent?.trim()?.slice(0, 80) ??
-          `group-${index + 1}`;
-        const options = Array.from(group.querySelectorAll('label, [role="checkbox"]'))
-          .map((option) => option.textContent?.trim())
-          .filter(Boolean)
-          .slice(0, 10)
-          .map((value) => ({ value: value as string, label: value as string }));
-        return { key: label, label, type: "checkbox", options };
+      const groups = Array.from(document.querySelectorAll('[role="group"]')).filter((group) => {
+        const checkboxCount = group.querySelectorAll('input[type="checkbox"], [role="checkbox"]').length;
+        return checkboxCount > 0;
       });
+
+      return groups.slice(0, 20).map((group) => {
+        const labelledBy = group.getAttribute("aria-labelledby");
+        const label =
+          group.getAttribute("aria-label")?.trim() ??
+          (labelledBy ? document.getElementById(labelledBy)?.textContent?.trim() : null) ??
+          group.querySelector("h2, h3, h4, legend")?.textContent?.trim() ??
+          null;
+
+        const options = Array.from(group.querySelectorAll("label"))
+          .map((option) => option.textContent?.replace(/\s+/g, " ").trim() ?? "")
+          .filter((value) => value.length > 1)
+          .filter((value) => !/Refine button|Click to filter/i.test(value))
+          .slice(0, 10)
+          .map((value) => ({ value, label: value }));
+
+        return label ? { key: label, label, type: "checkbox", options } : null;
+      }).filter((group) => group && group.options.length > 0);
     });
-    return filters.filter((group) => group.label && group.options.length > 0) as FilterGroup[];
+    return filters as FilterGroup[];
   }
 
   override async applyFilters(context: ProviderContext, input: FilterApplyRequest[]): Promise<SearchSummary> {
@@ -220,18 +258,26 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   override async selectResultsByIndex(context: ProviderContext, indices: number[]): Promise<void> {
     for (const index of indices) {
-      const checkbox = context.page.locator(`input[type="checkbox"]`).nth(Math.max(index - 1, 0));
-      if (await checkbox.isVisible().catch(() => false)) {
-        await checkbox.check({ force: true }).catch(async () => { await checkbox.click({ force: true }); });
-      }
+      const checkbox = await this.findResultSelectionCheckboxByIndex(context, index);
+      await checkbox.scrollIntoViewIfNeeded().catch(() => undefined);
+      await checkbox.check({ force: true }).catch(async () => {
+        await checkbox.click({ force: true });
+      });
     }
   }
 
   override async clearSelection(context: ProviderContext): Promise<void> {
-    const checked = context.page.locator('input[type="checkbox"]:checked');
+    const checked = context.page.locator(
+      [
+        'app-summary-record input[type="checkbox"]:checked',
+        '[data-ta="summary-record"] input[type="checkbox"]:checked',
+      ].join(", "),
+    );
     const count = await checked.count();
     for (let i = 0; i < count; i += 1) {
-      await checked.nth(i).uncheck({ force: true }).catch(async () => { await checked.nth(i).click({ force: true }); });
+      await checked.nth(i).uncheck({ force: true }).catch(async () => {
+        await checked.nth(i).click({ force: true });
+      });
     }
   }
 
@@ -253,24 +299,34 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   async exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
     await this.clearInterferingUi(context);
+
+    if (request.scope === "selected" && request.selectedIndices?.length) {
+      await this.clearSelection(context);
+      await this.selectResultsByIndex(context, request.selectedIndices);
+    }
+
     const exportButton = await this.findExportButton(context);
-    await runWithPageLoad(context.page, async () => { await exportButton.click({ force: true }); });
+    await exportButton.click({ force: true });
     await this.resolveBlockingOverlays(context, "opening the export menu");
 
-    const risMenuItem = context.page.locator("button, [role='menuitem']").filter({
-      hasText: /RIS \(other reference software\)|^RIS\b/i,
-    }).first();
-    await risMenuItem.waitFor({ state: "visible", timeout: 15_000 }).catch(async (error) => {
+    const exportMenu = context.page
+      .locator(".cdk-overlay-pane, [role='menu'], .mat-mdc-menu-panel")
+      .filter({ hasText: /RIS \(other reference software\)|^RIS\b/i })
+      .last();
+    await exportMenu.waitFor({ state: "visible", timeout: 15_000 }).catch(async (error) => {
       await this.resolveBlockingOverlays(context, "opening the RIS export menu");
       throw error;
     });
 
-    await runWithPageLoad(context.page, async () => { await risMenuItem.click({ force: true }); });
+    const risMenuItem = exportMenu.locator("button, [role='menuitem']").filter({
+      hasText: /RIS \(other reference software\)|^RIS\b/i,
+    }).first();
+    await risMenuItem.click({ force: true });
     await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
 
     const exportDialog = context.page.locator("mat-dialog-container, [role='dialog'], .cdk-overlay-pane, app-export-overlay").filter({
       hasText: /Export Records to RIS File/i,
-    }).first();
+    }).last();
     await exportDialog.waitFor({ state: "visible", timeout: 15_000 }).catch(async (error) => {
       await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
       throw error;
@@ -278,8 +334,10 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
     if (request.scope === "page") {
       const pageRadio = exportDialog.getByRole("radio", { name: /All records on page/i }).first();
-      if (await pageRadio.isVisible().catch(() => false)) { await pageRadio.click({ force: true }); }
-    } else {
+      if (await pageRadio.isVisible().catch(() => false)) {
+        await pageRadio.click({ force: true });
+      }
+    } else if (request.scope === "range" || request.scope === "all") {
       const start = request.start ?? 1;
       const end = request.end ?? 1000;
       await this.selectExportRange(exportDialog, start, end);
@@ -296,7 +354,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     });
     const [download] = await Promise.all([
       downloadPromise,
-      runWithPageLoad(context.page, async () => { await confirm.click({ force: true }); }),
+      confirm.click({ force: true }),
     ]);
 
     const fileName = download.suggestedFilename();
@@ -308,7 +366,13 @@ export class WosAdapter extends BaseSearchProviderAdapter {
       format: "ris",
       path: targetPath,
       fileName,
-      raw: { url: download.url(), scope: request.scope, start: request.start, end: request.end },
+      raw: {
+        url: download.url(),
+        scope: request.scope,
+        start: request.start,
+        end: request.end,
+        selectedIndices: request.selectedIndices,
+      },
     };
   }
 
@@ -490,6 +554,28 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     return null;
   }
 
+  private async readStoredQuery(context: ProviderContext): Promise<string | null> {
+    return context.page.evaluate((queryId) => {
+      if (!queryId) {
+        return null;
+      }
+
+      try {
+        return localStorage.getItem(`wos_search_${queryId}`);
+      } catch {
+        return null;
+      }
+    }, extractWosQueryId(context.page.url())).then((value) => parseWosStoredQuery(value));
+  }
+
+  private async findResultSelectionCheckboxByIndex(context: ProviderContext, index: number) {
+    const cards = context.page.locator(this.selectors.resultCards.join(", "));
+    const card = cards.nth(Math.max(index - 1, 0));
+    const checkbox = card.locator('input[type="checkbox"]').first();
+    await checkbox.waitFor({ state: "visible", timeout: 10_000 });
+    return checkbox;
+  }
+
   private async acceptCrossBorderPrivacyDialog(context: ProviderContext): Promise<void> {
     const confirmButton = context.page.locator("#cbdt_confirm").first();
     await confirmButton.waitFor({ state: "visible", timeout: 1_500 }).catch(() => undefined);
@@ -581,3 +667,10 @@ function extractInstitution(bodyText: string): string | null {
   if (/Peking University/i.test(bodyText)) return "Peking University";
   return null;
 }
+
+
+
+
+
+
+

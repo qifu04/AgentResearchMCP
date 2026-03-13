@@ -18,6 +18,7 @@ import {
   clickIfVisible,
   fillAndVerify,
   normalizeWhitespace,
+  readLocatorValue,
   runWithPageLoad,
 } from "../../browser/page-helpers.js";
 
@@ -80,7 +81,7 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     }
     try {
       const input = await this.findQueryInput(context);
-      return normalizeWhitespace(await input.inputValue());
+      return readLocatorValue(input);
     } catch {
       return null;
     }

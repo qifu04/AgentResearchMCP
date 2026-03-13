@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   ExportCapability,
   ExportRequest,
   ExportResult,
@@ -7,9 +7,11 @@ import type {
   ResultItem,
   SearchSummary,
 } from "../provider-contract.js";
+import { clickIfVisible } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
 import { scopusDescriptor } from "./descriptor.js";
 import { scopusQueryProfile } from "./query-profile.js";
+import { parseScopusSearchSummary } from "./search-parsing.js";
 import { scopusSelectors } from "./selectors.js";
 
 export class ScopusAdapter extends BaseSearchProviderAdapter {
@@ -17,7 +19,20 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
   readonly queryProfile = scopusQueryProfile;
   readonly selectors = scopusSelectors;
   readonly queryParamName = "s";
-  readonly submitUrlPattern = /results|s=/;
+  readonly submitUrlPattern = /results\.uri|[?&]s=/;
+
+  override async clearInterferingUi(context: ProviderContext): Promise<void> {
+    await super.clearInterferingUi(context);
+
+    const dismissors = [
+      context.page.getByRole("button", { name: /accept|agree/i }).first(),
+      context.page.getByRole("button", { name: /close|关闭/i }).first(),
+    ];
+
+    for (const locator of dismissors) {
+      await clickIfVisible(locator);
+    }
+  }
 
   async detectLoginState(context: ProviderContext): Promise<LoginState> {
     const state = await context.page.evaluate(() => {
@@ -76,21 +91,30 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
   }
 
   async readSearchSummary(context: ProviderContext): Promise<SearchSummary> {
-    const info = await context.page.evaluate(() => ({
-      url: location.href,
-      title: document.title,
-      bodyText: document.body.innerText,
-    }));
+    const info = await context.page.evaluate(() => {
+      const headingCandidates = Array.from(document.querySelectorAll("h1, h2, h3"))
+        .map((node) => node.textContent?.trim() ?? "")
+        .filter(Boolean);
+
+      return {
+        url: location.href,
+        title: document.title,
+        headingText: headingCandidates.find((text) => /(Found|found)\s+[\d,]+\s+documents?/i.test(text) || /找到\s+[\d,]+\s+篇文献/.test(text)) ?? null,
+        rangeText: headingCandidates.find((text) => /(\d+)\s+(?:to|TO|至)\s+(\d+)/.test(text) || /总共\s+[\d,]+\s+个结果/.test(text)) ?? null,
+        bodyText: document.body.innerText,
+      };
+    });
+    const parsed = parseScopusSearchSummary(info);
     const url = new URL(info.url);
-    const totalResultsMatch = /(Found|found)\s+([\d,]+)\s+documents/i.exec(info.bodyText);
+
     return {
       provider: "scopus",
-      query: url.searchParams.get("s") ?? "",
-      totalResultsText: totalResultsMatch?.[2] ?? null,
-      totalResults: totalResultsMatch?.[2] ? Number(totalResultsMatch[2].replace(/,/g, "")) : null,
-      currentPage: /\b1 to 10\b/.test(info.bodyText) ? 1 : null,
+      query: parsed.query,
+      totalResultsText: parsed.totalResultsText,
+      totalResults: parsed.totalResults,
+      currentPage: parsed.currentPage,
       totalPages: null,
-      pageSize: Number(url.searchParams.get("limit") ?? "10"),
+      pageSize: parsed.pageSize ?? Number(url.searchParams.get("limit") ?? "10"),
       queryId: url.searchParams.get("sessionSearchId"),
       sort: url.searchParams.get("sort"),
       raw: info,
@@ -98,30 +122,88 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
   }
 
   protected async readResultCards(context: ProviderContext, limit: number, includeAbstracts: boolean): Promise<ResultItem[]> {
+    if (includeAbstracts) {
+      const showAll = context.page.getByRole("button", { name: /Show all abstracts|显示所有摘要/i }).first();
+      if (await showAll.isVisible().catch(() => false)) {
+        await showAll.click({ force: true }).catch(() => undefined);
+      }
+    }
+
     const items = await context.page.evaluate(
       ({ requestedLimit, includeAbstracts: shouldInclude }) => {
-        const rows = Array.from(document.querySelectorAll('[data-testid="results-row"], tr, article')) as HTMLElement[];
+        const resultCheckboxSelector = 'input[aria-label^="选择结果 "], input[aria-label^="Select result "]';
+        const rows = Array.from(document.querySelectorAll(resultCheckboxSelector))
+          .map((node) => node.closest("tr"))
+          .filter((row): row is HTMLTableRowElement => row instanceof HTMLTableRowElement);
+
         return rows.slice(0, requestedLimit).map((row, index) => {
-          const titleLink = (row.querySelector("a") as HTMLAnchorElement | null);
-          const text = row.innerText;
-          const lines = text.split("\n").map((l) => l.trim()).filter(Boolean);
+          const checkbox = row.querySelector(resultCheckboxSelector) as HTMLInputElement | null;
+          const label = checkbox?.getAttribute("aria-label") ?? "";
+          const derivedIndex = /([0-9]+)/.exec(label)?.[1];
+          const cells = Array.from(row.cells);
+          const titleCell = cells[1] ?? null;
+          const authorsCell = cells[2] ?? null;
+          const sourceCell = cells[3] ?? null;
+          const yearCell = cells[4] ?? null;
+          const titleLink = titleCell?.querySelector("h3 a, a") as HTMLAnchorElement | null;
+
+          let abstractPreview: string | null = null;
+          if (shouldInclude) {
+            const detailTexts: string[] = [];
+            let sibling = row.nextElementSibling;
+            while (sibling instanceof HTMLTableRowElement && !sibling.querySelector(resultCheckboxSelector)) {
+              const text = sibling.innerText?.trim();
+              if (text && !/^(查看摘要|View abstract)\b/i.test(text)) {
+                detailTexts.push(text);
+              }
+              sibling = sibling.nextElementSibling;
+            }
+            abstractPreview = detailTexts.join(" ").trim() || null;
+          }
+
           return {
             provider: "scopus",
-            indexOnPage: index + 1,
+            indexOnPage: derivedIndex ? Number(derivedIndex) : index + 1,
             title: titleLink?.textContent?.trim() ?? `Result ${index + 1}`,
             href: titleLink?.href ?? null,
-            authorsText: lines[1] ?? null,
-            sourceText: lines[2] ?? null,
-            yearText: text.match(/\b(19|20)\d{2}\b/)?.[0] ?? null,
-            abstractPreview: shouldInclude ? (lines.find((l) => l.length > 40) ?? null) : null,
-            selectable: Boolean(row.querySelector('input[type="checkbox"]')),
-            raw: { text: text.slice(0, 4000) },
+            authorsText: authorsCell?.innerText?.trim() ?? null,
+            sourceText: sourceCell?.innerText?.trim() ?? null,
+            yearText: yearCell?.innerText?.trim() ?? null,
+            abstractPreview,
+            selectable: Boolean(checkbox),
+            raw: { text: row.innerText.slice(0, 4000) },
           };
         });
       },
       { requestedLimit: limit, includeAbstracts },
     );
+
     return items as ResultItem[];
+  }
+
+  override async selectResultsByIndex(context: ProviderContext, indices: number[]): Promise<void> {
+    for (const index of indices) {
+      const checkbox = context.page
+        .locator(`input[aria-label="选择结果 ${index}"], input[aria-label="Select result ${index}"]`)
+        .first();
+      await checkbox.waitFor({ state: "visible", timeout: 10_000 });
+
+      if (!(await checkbox.isChecked().catch(() => false))) {
+        await checkbox.check({ force: true }).catch(async () => {
+          await checkbox.click({ force: true });
+        });
+      }
+    }
+  }
+
+  override async clearSelection(context: ProviderContext): Promise<void> {
+    const checked = context.page.locator('input[aria-label^="选择结果 "]:checked, input[aria-label^="Select result "]:checked');
+    const count = await checked.count();
+    for (let i = 0; i < count; i += 1) {
+      await checked.nth(i).uncheck({ force: true }).catch(async () => {
+        await checked.nth(i).click({ force: true });
+      });
+    }
   }
 
   async detectExportCapability(context: ProviderContext): Promise<ExportCapability> {

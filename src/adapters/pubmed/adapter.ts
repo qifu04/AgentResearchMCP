@@ -1,9 +1,10 @@
-import path from "node:path";
+﻿import path from "node:path";
 import type {
   ExportCapability,
   ExportRequest,
   ExportResult,
   FilterApplyRequest,
+  FilterGroup,
   LoginState,
   ProviderContext,
   ResultItem,
@@ -124,19 +125,57 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
     return items as ResultItem[];
   }
 
+  override async listFilters(context: ProviderContext): Promise<FilterGroup[]> {
+    const filters = await context.page.evaluate(() => {
+      const root = document.querySelector("#static-filters");
+      if (!(root instanceof HTMLElement)) {
+        return [];
+      }
+
+      const containerSelector = ".form-field.filters-field, .choice-group, .timeline-filter";
+      const containers = Array.from(root.querySelectorAll(containerSelector)).filter((node) => {
+        const parentContainer = node.parentElement?.closest(containerSelector);
+        return !parentContainer || !root.contains(parentContainer);
+      });
+
+      return containers
+        .map((group) => {
+          const label =
+            group.querySelector("h3.title, legend, .title")?.textContent?.trim() ??
+            group.getAttribute("aria-label")?.trim() ??
+            null;
+          const optionTexts = Array.from(group.querySelectorAll("li > label, li label, label"))
+            .map((option) => option.textContent?.trim() ?? "")
+            .filter((text) => text.length > 1);
+          const uniqueOptions = Array.from(new Set(optionTexts)).map((value) => ({ value, label: value }));
+          return label ? { key: label, label, type: "checkbox", options: uniqueOptions } : null;
+        })
+        .filter((group): group is NonNullable<typeof group> => group !== null && group.options.length > 0);
+    });
+
+    return filters as FilterGroup[];
+  }
+
   override async applyFilters(context: ProviderContext, input: FilterApplyRequest[]): Promise<SearchSummary> {
+    const filterRoot = context.page.locator("#static-filters").first();
+
     for (const filter of input) {
+      const scopedGroup = filterRoot
+        .locator(".form-field.filters-field, .choice-group, .usa-accordion-content .choice-group")
+        .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(filter.key)}`, "i") })
+        .first();
+      const scope = (await scopedGroup.isVisible().catch(() => false)) ? scopedGroup : filterRoot;
+
       for (const value of filter.values ?? []) {
-        const label = context.page.getByLabel(new RegExp(escapeRegExp(value), "i")).first();
-        if (await label.isVisible().catch(() => false)) {
-          await runWithPageLoad(context.page, async () => {
-            await label.check({ force: true }).catch(async () => {
-              await label.click({ force: true });
-            });
-          });
-        }
+        const option = scope.locator("label").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i") }).first();
+        await option.waitFor({ state: "visible", timeout: 10_000 });
+        await option.scrollIntoViewIfNeeded().catch(() => undefined);
+        await runWithPageLoad(context.page, async () => {
+          await option.click({ force: true });
+        });
       }
     }
+
     return this.readSearchSummary(context);
   }
 
@@ -278,3 +317,5 @@ function scopeToPubMedSelectionValue(scope: ExportRequest["scope"]): string {
       return "custom-results-selection";
   }
 }
+
+

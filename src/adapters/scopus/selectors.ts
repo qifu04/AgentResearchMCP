@@ -1,8 +1,11 @@
-import type { AdapterSelectors } from "../base/adapter-selectors.js";
+﻿import type { AdapterSelectors } from "../base/adapter-selectors.js";
 
 export const scopusSelectors: AdapterSelectors = {
-  queryInputs: ['textarea', 'input[type="text"]'],
-  searchButtons: ['button:has-text("Search")', '[role="button"]:has-text("Search")'],
-  resultCards: ['[data-testid="results-row"]', 'tr', 'article'],
-  filterGroups: ['aside section', 'fieldset', '.filter-panel', '.accordion'],
+  queryInputs: ['form#advSearchForm #searchfield[contenteditable="true"][role="textbox"]'],
+  searchButtons: ["form#advSearchForm button#advSearch"],
+  resultCards: [
+    'table tr:has(input[aria-label^="选择结果 "])',
+    'table tr:has(input[aria-label^="Select result "])',
+  ],
+  filterGroups: ['main [role="combobox"][aria-expanded]'],
 };

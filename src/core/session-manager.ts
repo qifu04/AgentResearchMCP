@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import { randomUUID } from "node:crypto";
 import type { ProviderId, SessionPhase } from "../adapters/provider-contract.js";
 import { PlaywrightFactory } from "../browser/playwright-factory.js";
@@ -114,17 +114,26 @@ export class SessionManager {
     await this.setPhase(sessionId, "starting");
 
     let userDataDir: string | null = null;
-    if (session.record.persistentProfile) {
-      // Acquire exclusive lock before launching browser with this profile
-      this.profileStore.acquireProfileLock(session.record.provider, session.record.profileKey, sessionId);
-      userDataDir = await this.profileStore.ensureProfileDir(session.record.provider, session.record.profileKey);
-    }
+    let acquiredProfileLock = false;
+    try {
+      if (session.record.persistentProfile) {
+        // Acquire exclusive lock before launching browser with this profile.
+        this.profileStore.acquireProfileLock(session.record.provider, session.record.profileKey, sessionId);
+        acquiredProfileLock = true;
+        userDataDir = await this.profileStore.ensureProfileDir(session.record.provider, session.record.profileKey);
+      }
 
-    session.runtime = await this.playwrightFactory.createRuntime({
-      viewport: session.record.viewport ?? undefined,
-      downloadsPath: session.paths.downloadsDir,
-      userDataDir,
-    });
+      session.runtime = await this.playwrightFactory.createRuntime({
+        viewport: session.record.viewport ?? undefined,
+        downloadsPath: session.paths.downloadsDir,
+        userDataDir,
+      });
+    } catch (error) {
+      if (acquiredProfileLock) {
+        this.profileStore.releaseProfileLock(session.record.provider, session.record.profileKey, sessionId);
+      }
+      throw error;
+    }
     this.attachRuntimeObservers(session);
     await this.setPhase(sessionId, "ready");
     return session;
@@ -227,3 +236,4 @@ export class SessionManager {
     });
   }
 }
+
