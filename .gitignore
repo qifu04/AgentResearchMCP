@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Runtime state (sessions, downloads, auth profiles)
+.agent-research-mcp/
+
+# Playwright MCP plugin artifacts
+.playwright-mcp/
+
+# Claude Code local settings
+.claude/
+
+# Logs
+debug.log
+*.log
+
+# Test artifacts
+playwright-report/
+test-results/
+
+# Exploration artifacts (screenshots, snapshots, network logs)
+docs/*.png
+docs/*.snapshot.md
+docs/*.console.txt
+docs/*.network.txt
+docs/tmp-*
+
+# OS
+Thumbs.db
+Desktop.ini
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

@@ -1,0 +1,28 @@
+{
+  "name": "agent-research-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Playwright-driven MCP server for scholarly search providers.",
+  "bin": {
+    "agent-research-mcp": "./dist/server/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx src/server/index.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "check": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.27.1",
+    "playwright": "^1.58.2",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.4.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.1.0"
+  }
+}

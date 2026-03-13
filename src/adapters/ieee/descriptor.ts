@@ -1,0 +1,16 @@
+import type { ProviderDescriptor } from "../provider-contract.js";
+
+export const ieeeDescriptor: ProviderDescriptor = {
+  id: "ieee",
+  displayName: "IEEE Xplore",
+  entryUrl: "https://ieeexplore.ieee.org/search/advanced",
+  supportsManualLoginWait: true,
+  capabilities: {
+    rawQuery: true,
+    builderUi: true,
+    filters: true,
+    inlineAbstracts: true,
+    selection: true,
+    export: true,
+  },
+};

@@ -1,3 +1,5 @@
+import type { Page } from "playwright";
+
 export type ProviderId = "wos" | "pubmed" | "ieee" | "scopus" | (string & {});
 
 export type SessionPhase =
@@ -5,6 +7,7 @@ export type SessionPhase =
   | "starting"
   | "ready"
   | "awaiting_user_login"
+  | "awaiting_manual_intervention"
   | "search_ready"
   | "searching"
   | "exporting"
@@ -41,7 +44,7 @@ export interface ProviderContext {
   phase: SessionPhase;
   artifactsDir: string;
   downloadsDir: string;
-  page?: unknown;
+  page: Page;
   raw?: unknown;
 }
 
