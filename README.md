@@ -164,6 +164,12 @@ Phase C: 导出
 | `convert_export_to_ris` | 将 NBIB/CSV 转换为 RIS |
 | `capture_session_artifacts` | 捕获 DOM/截图/网络日志用于调试 |
 
+## 贡献
+
+想要添加新的数据库支持？参阅 [适配器开发指南](docs/adapter-authoring-guide.md)。
+
+每个适配器由 4 个文件组成（descriptor / query-profile / selectors / adapter），项目提供了完整的模板目录 `src/adapters/template/` 作为起点。
+
 ## 开发
 
 ```bash
