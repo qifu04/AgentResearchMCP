@@ -8,7 +8,7 @@ export const scopusDescriptor: ProviderDescriptor = {
   capabilities: {
     rawQuery: true,
     builderUi: true,
-    filters: true,
+    filters: false,
     inlineAbstracts: true,
     selection: true,
     export: true,

@@ -127,8 +127,10 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
     });
 
     const isPersonal = state.isLoggedInUser === true || state.isIndividuallyAuthenticated === true || state.isIndividual === true;
+    const onScopusDomain = new URL(state.url).hostname.endsWith("scopus.com");
     const isInstitutional =
       !isPersonal &&
+      onScopusDomain &&
       (state.accessTypeAA?.includes("INST") ||
         state.accessTypeAA?.includes("ANON") ||
         state.usagePathInfo?.includes("ANON_IP") ||

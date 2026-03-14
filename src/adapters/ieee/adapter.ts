@@ -212,11 +212,14 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       return;
     }
 
+    // Uncheck one at a time, always targeting the first :checked element
+    // because each click removes it from the :checked set, shifting indices.
     const checked = context.page.locator('xpl-results-item input[aria-label="Select search result"]:checked');
-    const count = await checked.count();
-    for (let i = 0; i < count; i += 1) {
-      await checked.nth(i).evaluate((el) => (el as HTMLInputElement).click());
+    let remaining = await checked.count();
+    while (remaining > 0) {
+      await checked.first().evaluate((el) => (el as HTMLInputElement).click());
       await context.page.waitForTimeout(100);
+      remaining = await checked.count();
     }
   }
 
