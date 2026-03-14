@@ -1,8 +1,0 @@
-{
-  "mcpServers": {
-    "agent-research": {
-      "type": "http",
-      "url": "http://localhost:3100/mcp"
-    }
-  }
-}

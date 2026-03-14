@@ -9,7 +9,7 @@ export const WORKFLOW_GUIDE = `
 
 This MCP server automates scholarly literature searches across academic databases
 using real browser sessions (Playwright). It handles login detection, query entry,
-search execution, result scraping, filtering, and RIS export.
+search execution, result scraping, and RIS export.
 
 Every tool response includes a \`nextActions\` array telling you what to call next.
 Always check \`ok\` and \`nextActions\` in every response.
@@ -35,13 +35,12 @@ Phase A: Session Setup
         |
         v
 Phase B: Iterative Search & Refinement (repeat until satisfied)
-  1. Construct/refine search query
+  1. Construct/refine search query (include filtering in query syntax)
   2. run_search -> check totalResults
   3. read_result_sample -> evaluate title relevance
   4. read_result_sample (with abstracts) -> extract keywords
   5. Refine query with new keywords/terms
-  6. (optional) apply_filters to narrow results
-  7. Repeat from step 1 if not satisfied
+  6. Repeat from step 1 if not satisfied
         |
         v
 Phase C: Export & Cleanup
@@ -98,6 +97,16 @@ This is the core research loop. Repeat until the results meet the user's require
   provider's syntax from \`get_query_language_profile\`.
 - Start broad: use core concepts connected with AND.
 - Example: "deep learning" AND "medical imaging"
+- Incorporate ALL filtering (document type, year, language) directly into
+  the query syntax. Do NOT rely on sidebar UI filters.
+
+Query-based filtering quick reference:
+- PubMed: Review[pt], english[la], 2020:2024[dp], Systematic Review[pt]
+- WOS: PY=(2020-2024), WC=(Genetics & Heredity). NOTE: DT and LA are NOT
+  query fields in current WOS — only available as post-search sidebar filters.
+- Scopus: DOCTYPE(re), LANGUAGE(english), PUBYEAR AFT 2019, SUBJAREA(MEDI)
+- IEEE: "Field Name":"value" syntax. NOTE: Year and content type CANNOT be
+  filtered in query — use URL parameters or post-search facets.
 
 ### B2. run_search
 - Input: \`sessionId\`, \`query\`, \`sampleSize\` (1-20, default 5)
@@ -133,17 +142,7 @@ This is the core research loop. Repeat until the results meet the user's require
   Round 3: ... AND NOT "survey" (if too many review papers)
 - Go back to B2 with the refined query.
 
-### B6. Apply filters (optional)
-- Use \`list_filters\` to see available facets (year, document type, language, etc.).
-- Use \`apply_filters\` to narrow results without changing the query.
-- Only available if the provider's \`capabilities.filters\` is true.
-- Common filter strategies:
-  - Year range: focus on recent publications
-  - Document type: Articles only (exclude conference abstracts)
-  - Language: English only
-- After filtering, re-evaluate with B3.
-
-### B7. Decide: satisfied or iterate?
+### B6. Decide: satisfied or iterate?
 - If the results are relevant and the count is manageable -> proceed to Phase C.
 - If not satisfied -> return to B5 and refine further.
 - Typical iteration: 2-4 rounds of refinement.
@@ -208,15 +207,16 @@ For comprehensive literature reviews, search across multiple databases:
 9. The \`scope\` parameter for export only supports "all" — exporting selected
    results is not supported by design.
 10. For systematic reviews, search at least 2-3 databases and merge results.
+11. Incorporate all filtering (document type, year, language) directly into
+   the query. Avoid sidebar UI filters — they depend on fragile CSS selectors.
 
 ## Anti-Patterns
 
 - Do NOT call \`export_results\` before \`run_search\` — there are no results to export.
 - Do NOT skip \`open_advanced_search\` — the browser needs to be on the right page.
-- Do NOT assume all providers support filters — check \`capabilities.filters\`.
 - Do NOT call \`set_query\` then \`run_search\` with a query param (double-sets).
+- Do NOT use sidebar UI filters — incorporate all filtering into the query syntax.
 - Do NOT ignore the \`phase\` field — it tells you the session's current state.
-- Do NOT call \`apply_filters\` on providers with \`capabilities.filters: false\`.
 - Do NOT export without first iterating on the query — refine until results are relevant.
 
 ## Session Phases

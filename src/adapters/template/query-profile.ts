@@ -52,10 +52,15 @@ export const templateQueryProfile: QueryLanguageProfile = {
   rawEntryLabel: null,
   fieldTags: [
     // TODO: Add field tags from the provider's search documentation.
+    // Include FILTERING fields (document type, language, year, subject area)
+    // so AI agents can build complete queries without relying on sidebar UI filters.
     // Example:
     // { code: "TI", label: "Title", description: "Search in article titles" },
     // { code: "AU", label: "Author", description: "Search by author name" },
     // { code: "AB", label: "Abstract", description: "Search in abstracts" },
+    // { code: "DT", label: "Document Type", description: "Article, Review, etc." },
+    // { code: "LA", label: "Language", description: "english, chinese, etc." },
+    // { code: "PY", label: "Year", description: "Publication year or range" },
   ],
   booleanOperators: ["AND", "OR", "NOT"],
   proximityOperators: [],

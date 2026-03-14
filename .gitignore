@@ -30,6 +30,10 @@ docs/tmp-*
 
 # Temporary debug/test scripts and artifacts
 .tmp-*
+test-exports/
+
+# Local MCP client config (port may differ per developer)
+.mcp.json
 
 # OS
 Thumbs.db

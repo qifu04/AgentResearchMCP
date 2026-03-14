@@ -2,8 +2,6 @@ import type {
   ExportCapability,
   ExportRequest,
   ExportResult,
-  FilterApplyRequest,
-  FilterGroup,
   LoginState,
   ProviderContext,
   ResultItem,
@@ -396,35 +394,6 @@ export class TemplateAdapter extends BaseSearchProviderAdapter {
   //  */
   // override async submitSearch(context: ProviderContext): Promise<SearchSummary> {
   //   // TODO: Custom search submission
-  // }
-
-  // /**
-  //  * Override if the provider has sidebar facet filters you want to support.
-  //  *
-  //  * Default: generic filter extraction from DOM (may not work for all providers).
-  //  *
-  //  * Override when:
-  //  * - The filter UI uses non-standard elements
-  //  * - Filters are loaded asynchronously
-  //  * - You want to expose provider-specific filter types
-  //  *
-  //  * IMPORTANT: If you implement this, also set `capabilities.filters: true`
-  //  * in descriptor.ts.
-  //  */
-  // override async listFilters(context: ProviderContext): Promise<FilterGroup[]> {
-  //   // TODO: Custom filter extraction
-  // }
-
-  // /**
-  //  * Override to implement filter application.
-  //  *
-  //  * Default: throws "not implemented".
-  //  *
-  //  * IMPORTANT: Only implement if you also implement `listFilters` and set
-  //  * `capabilities.filters: true` in descriptor.ts.
-  //  */
-  // override async applyFilters(context: ProviderContext, input: FilterApplyRequest[]): Promise<SearchSummary> {
-  //   // TODO: Click filter checkboxes, wait for results to reload
   // }
 
   // /**

@@ -79,15 +79,8 @@ export const templateSelectors: AdapterSelectors = {
     //       "[data-testid='result-card']", "tr.result-row"
   ],
 
-  /**
-   * Filter/facet group containers in the sidebar.
-   * Each matched element should be ONE filter category (e.g., "Year",
-   * "Document Type") containing multiple checkbox/radio options.
-   */
-  filterGroups: [
-    // TODO: e.g., ".facet-group", "[data-testid^='filter-']",
-    //       ".sidebar-filter-section"
-  ],
+  /** Sidebar filter groups. Usually not needed — prefer query-based filtering. */
+  filterGroups: [],
 
   // ─── Provider-specific selector groups ───────────────────────────
   // Add extra selector arrays below as needed for your provider.
