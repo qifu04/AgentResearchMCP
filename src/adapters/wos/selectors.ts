@@ -1,4 +1,4 @@
-import type { AdapterSelectors } from "../base/adapter-selectors.js";
+﻿import type { AdapterSelectors } from "../base/adapter-selectors.js";
 
 export const wosSelectors: AdapterSelectors = {
   queryInputs: [
@@ -16,15 +16,14 @@ export const wosSelectors: AdapterSelectors = {
     "app-advanced-search-form button.search",
   ],
   resultCards: [
+    "app-record",
+    'div.summary-record',
     'app-summary-record',
     '[data-ta="summary-record"]',
-    "app-record",
     "article",
   ],
   filterGroups: [
-    '[role="group"]',
-    'mat-accordion mat-expansion-panel',
-    "aside section",
+    'form[aria-label="Refine panel"] fieldset.filter-section[id^="filter-section-"]',
   ],
   queryBuilderTab: [
     'text="QUERY BUILDER"',

@@ -12,7 +12,7 @@ import type {
 } from "../provider-contract.js";
 import { runWithPageLoad } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
-import { cssEscape, escapeRegExp } from "../base/adapter-utils.js";
+import { cssEscape } from "../base/adapter-utils.js";
 import { pubmedDescriptor } from "./descriptor.js";
 import { pubmedQueryProfile } from "./query-profile.js";
 import { parsePubMedSearchSummary } from "./summary-parsing.js";
@@ -127,28 +127,32 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
 
   override async listFilters(context: ProviderContext): Promise<FilterGroup[]> {
     const filters = await context.page.evaluate(() => {
-      const root = document.querySelector("#static-filters");
-      if (!(root instanceof HTMLElement)) {
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim() ?? null;
+      const groups = Array.from(document.querySelectorAll([
+        '#static-filters .choice-group-wrapper[role="group"][aria-label="Filters"] > .choice-group',
+        '#additional_filters.choice-group-wrapper[role="group"][aria-label="Additional filters"] > .choice-group',
+      ].join(", ")));
+      if (groups.length === 0) {
         return [];
       }
 
-      const containerSelector = ".form-field.filters-field, .choice-group, .timeline-filter";
-      const containers = Array.from(root.querySelectorAll(containerSelector)).filter((node) => {
-        const parentContainer = node.parentElement?.closest(containerSelector);
-        return !parentContainer || !root.contains(parentContainer);
-      });
-
-      return containers
+      return groups
         .map((group) => {
-          const label =
-            group.querySelector("h3.title, legend, .title")?.textContent?.trim() ??
-            group.getAttribute("aria-label")?.trim() ??
-            null;
-          const optionTexts = Array.from(group.querySelectorAll("li > label, li label, label"))
-            .map((option) => option.textContent?.trim() ?? "")
-            .filter((text) => text.length > 1);
-          const uniqueOptions = Array.from(new Set(optionTexts)).map((value) => ({ value, label: value }));
-          return label ? { key: label, label, type: "checkbox", options: uniqueOptions } : null;
+          const heading = normalize(group.querySelector("h3.title")?.textContent);
+          const inputs = Array.from(group.querySelectorAll('input[type="checkbox"], input[type="radio"]'));
+          const options = inputs
+            .map((input) => {
+              const boundLabel =
+                input.id
+                  ? group.querySelector(`label[for="${input.id}"]`)
+                  : input.closest("label");
+              const label = normalize(boundLabel?.textContent) ?? normalize(input.getAttribute("aria-label"));
+              return label ? { value: label, label } : null;
+            })
+            .filter((option): option is { value: string; label: string } => option !== null)
+            .filter((option, index, all) => all.findIndex((candidate) => candidate.value === option.value) === index);
+          const type = inputs.every((input) => input instanceof HTMLInputElement && input.type === "radio") ? "radio" : "checkbox";
+          return heading ? { key: heading, label: heading, type, options } : null;
         })
         .filter((group): group is NonNullable<typeof group> => group !== null && group.options.length > 0);
     });
@@ -158,16 +162,30 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
 
   override async applyFilters(context: ProviderContext, input: FilterApplyRequest[]): Promise<SearchSummary> {
     const filterRoot = context.page.locator("#static-filters").first();
+    const additionalFiltersButton = filterRoot.getByRole("button", { name: /^Additional filters$/i }).first();
 
     for (const filter of input) {
-      const scopedGroup = filterRoot
-        .locator(".form-field.filters-field, .choice-group, .usa-accordion-content .choice-group")
-        .filter({ hasText: new RegExp(`^\\s*${escapeRegExp(filter.key)}`, "i") })
-        .first();
-      const scope = (await scopedGroup.isVisible().catch(() => false)) ? scopedGroup : filterRoot;
+      let hasGroup = await this.findPubMedFilterGroup(context, filter.key);
+      if (!hasGroup && await additionalFiltersButton.isVisible().catch(() => false)) {
+        await additionalFiltersButton.click({ force: true }).catch(() => undefined);
+        hasGroup = await this.findPubMedFilterGroup(context, filter.key);
+      }
+      if (!hasGroup) {
+        continue;
+      }
 
       for (const value of filter.values ?? []) {
-        const option = scope.locator("label").filter({ hasText: new RegExp(`^\\s*${escapeRegExp(value)}\\s*$`, "i") }).first();
+        const optionId = await this.findPubMedFilterInputId(context, filter.key, value);
+        if (!optionId) {
+          continue;
+        }
+
+        const checkbox = context.page.locator(`#${cssEscape(optionId)}`).first();
+        if (await checkbox.isChecked().catch(() => false)) {
+          continue;
+        }
+
+        const option = context.page.locator(`label[for="${escapeAttributeSelectorValue(optionId)}"]`).first();
         await option.waitFor({ state: "visible", timeout: 10_000 });
         await option.scrollIntoViewIfNeeded().catch(() => undefined);
         await runWithPageLoad(context.page, async () => {
@@ -303,6 +321,48 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
       raw: { scope: request.scope, url: download.url() },
     };
   }
+  private async findPubMedFilterGroup(context: ProviderContext, key: string): Promise<boolean> {
+    const groupSelector = [
+      '#static-filters .choice-group-wrapper[role="group"][aria-label="Filters"] > .choice-group',
+      '#additional_filters.choice-group-wrapper[role="group"][aria-label="Additional filters"] > .choice-group',
+    ].join(", ");
+
+    return context.page.evaluate(
+      ({ requestedKey, selector }) => {
+        const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
+        return Array.from(document.querySelectorAll(selector)).some((node) => {
+          if (!(node instanceof HTMLElement)) {
+            return false;
+          }
+          return normalize(node.querySelector("h3.title")?.textContent) === normalize(requestedKey);
+        });
+      },
+      { requestedKey: key, selector: groupSelector },
+    );
+  }
+
+  private async findPubMedFilterInputId(context: ProviderContext, key: string, value: string): Promise<string | null> {
+    const groupSelector = [
+      '#static-filters .choice-group-wrapper[role="group"][aria-label="Filters"] > .choice-group',
+      '#additional_filters.choice-group-wrapper[role="group"][aria-label="Additional filters"] > .choice-group',
+    ].join(", ");
+
+    return context.page.evaluate(
+      ({ requestedKey, requestedValue, selector }) => {
+        const normalize = (text: string | null | undefined) => text?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
+        const groups = Array.from(document.querySelectorAll(selector)).filter((node): node is HTMLElement => node instanceof HTMLElement);
+        const group = groups.find((node) => normalize(node.querySelector("h3.title")?.textContent) === normalize(requestedKey));
+        if (!group) {
+          return null;
+        }
+
+        const labels = Array.from(group.querySelectorAll("label"));
+        const matchingLabel = labels.find((node) => normalize(node.textContent) === normalize(requestedValue));
+        return matchingLabel?.getAttribute("for") ?? null;
+      },
+      { requestedKey: key, requestedValue: value, selector: groupSelector },
+    );
+  }
 }
 
 function scopeToPubMedSelectionValue(scope: ExportRequest["scope"]): string {
@@ -317,5 +377,14 @@ function scopeToPubMedSelectionValue(scope: ExportRequest["scope"]): string {
       return "custom-results-selection";
   }
 }
+
+function escapeAttributeSelectorValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+
+
+
+
 
 

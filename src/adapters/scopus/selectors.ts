@@ -6,6 +6,8 @@ export const scopusSelectors: AdapterSelectors = {
   resultCards: [
     'table tr:has(input[aria-label^="选择结果 "])',
     'table tr:has(input[aria-label^="Select result "])',
+    '.document-results-list-layout table tbody tr:has(input[type="checkbox"])',
   ],
-  filterGroups: ['main [role="combobox"][aria-expanded]'],
+  filterGroups: ['[role="combobox"][aria-controls]'],
+  exportButtons: ["button#export-login-modal", "button#export_results"],
 };

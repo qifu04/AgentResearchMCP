@@ -241,15 +241,17 @@ export class SearchService {
   ): Promise<SearchObservation> {
     const session = await this.sessionManager.requireSession(sessionId);
     const context = this.sessionManager.buildProviderContext(session);
-    const [loginState, queryProfile, summary, items, withAbstracts, filters, exportCapability] = await Promise.all([
+    await waitForDocumentReady(context.page);
+
+    const [loginState, queryProfile, summary, filters, exportCapability] = await Promise.all([
       adapter.detectLoginState(context),
       adapter.getQueryLanguageProfile(context),
       adapter.readSearchSummary(context),
-      adapter.readResultItems(context, sampleSize),
-      adapter.readResultAbstracts(context, sampleSize),
       adapter.listFilters(context),
       adapter.detectExportCapability(context),
     ]);
+    const items = await adapter.readResultItems(context, sampleSize);
+    const withAbstracts = await adapter.readResultAbstracts(context, sampleSize);
 
     return {
       loginState,

@@ -1,4 +1,4 @@
-﻿import path from "node:path";
+import path from "node:path";
 import type { Locator } from "playwright";
 import type {
   ExportCapability,
@@ -14,7 +14,7 @@ import type {
 import { clickIfVisible, fillAndVerify, normalizeWhitespace, readLocatorValue, runWithPageLoad, textContentOrNull } from "../../browser/page-helpers.js";
 import { ManualInterventionRequiredError } from "../../core/manual-intervention.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
-import { escapeRegExp } from "../base/adapter-utils.js";
+import { cssEscape, escapeRegExp } from "../base/adapter-utils.js";
 import { wosDescriptor } from "./descriptor.js";
 import { wosQueryProfile } from "./query-profile.js";
 import {
@@ -22,6 +22,7 @@ import {
   WOS_EXPORT_BUTTON_CANDIDATE_ATTRIBUTE,
   type WosExportButtonCandidate,
 } from "./export-button-targeting.js";
+import { writeTextFile } from "../../utils/fs.js";
 import {
   chooseWosPrimarySearchButtonCandidate,
   WOS_SEARCH_BUTTON_CANDIDATE_ATTRIBUTE,
@@ -29,6 +30,8 @@ import {
 } from "./search-button-targeting.js";
 import { wosFilterKeyToLabel, wosSelectors } from "./selectors.js";
 import { extractWosQueryId, parseWosSearchSummary, parseWosStoredQuery } from "./search-parsing.js";
+
+const DEBUG_WOS_EXPORT = process.env.DEBUG_WOS_EXPORT === "1";
 
 export class WosAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = wosDescriptor;
@@ -47,17 +50,19 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   override async clearInterferingUi(context: ProviderContext): Promise<void> {
-    await runWithPageLoad(context.page, async () => {
-      await this.resolveBlockingOverlays(context, "preparing the page");
-      const dismissors = [
-        context.page.getByRole("button", { name: /accept|agree|continue/i }).first(),
-        context.page.getByRole("button", { name: /close|got it|skip/i }).first(),
-        context.page.getByRole("button", { name: /dismiss/i }).first(),
-      ];
-      for (const locator of dismissors) {
-        await clickIfVisible(locator);
-      }
-    });
+    // Intentionally NOT wrapped in runWithPageLoad — WoS keeps background
+    // network requests alive (analytics, telemetry) that prevent networkidle
+    // from resolving in a reasonable time.
+    await this.resolveBlockingOverlays(context, "preparing the page");
+    const dismissors = [
+      context.page.getByRole("button", { name: /accept all|accept|agree|continue/i }).first(),
+      context.page.getByRole("button", { name: /close this tour/i }).first(),
+      context.page.getByRole("button", { name: /close|got it|skip/i }).first(),
+      context.page.getByRole("button", { name: /dismiss/i }).first(),
+    ];
+    for (const locator of dismissors) {
+      await clickIfVisible(locator);
+    }
   }
 
   async detectLoginState(context: ProviderContext): Promise<LoginState> {
@@ -109,37 +114,52 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     }
 
     await this.ensureQueryBuilderVisible(context);
-    await runWithPageLoad(context.page, async () => {
-      const queryBox = await this.findQueryPreview(context);
-      await fillAndVerify(queryBox, query);
-    });
+    const queryBox = await this.findQueryPreview(context);
+    await fillAndVerify(queryBox, query);
   }
 
   override async submitSearch(context: ProviderContext): Promise<SearchSummary> {
     await this.ensureQueryBuilderVisible(context);
     await this.clearInterferingUi(context);
-    await runWithPageLoad(context.page, async () => {
-      const button = await this.findWosSearchButton(context);
-      await Promise.all([
-        context.page.waitForURL(/\/summary\//, { timeout: 30_000 }).catch(() => undefined),
-        button.click(),
-      ]);
-    });
+    const button = await this.findWosSearchButton(context);
+    await Promise.all([
+      context.page.waitForURL(/\/summary\//, { timeout: 30_000 }).catch(() => undefined),
+      button.click(),
+    ]);
+    await context.page.waitForLoadState("domcontentloaded");
     return this.readSearchSummary(context);
   }
 
   async readSearchSummary(context: ProviderContext): Promise<SearchSummary> {
+    const queryId = extractWosQueryId(context.page.url());
     const storedQuery = await this.readStoredQuery(context);
+    const storedHits = await this.readStoredHits(context, queryId);
     const info = await context.page.evaluate(() => {
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim() ?? null;
+      const resultsHeadingText =
+        Array.from(document.querySelectorAll("h1, h2, h3"))
+          .map((node) => normalize(node.textContent))
+          .find((text) => Boolean(text && /\bresults?\s+from\s+Web of Science\b/i.test(text))) ?? null;
+      const matchedRecordsText =
+        Array.from(document.querySelectorAll("div, p, span"))
+          .map((node) => normalize(node.textContent))
+          .find((text) => Boolean(text && /\brecords?\s+matched your query\b/i.test(text))) ?? null;
+      const visibleQueryText =
+        Array.from(document.querySelectorAll("strong"))
+          .map((node) => normalize(node.textContent))
+          .find((text) => Boolean(text && /[=#()]/.test(text) && (/[=]/.test(text) || /\b(?:AND|OR|NOT)\b/i.test(text)))) ?? null;
       const paginationText =
         Array.from(document.querySelectorAll("button, span, div"))
-          .map((node) => node.textContent?.replace(/\s+/g, " ").trim() ?? "")
+          .map((node) => normalize(node.textContent) ?? "")
           .find((text) => /\bPage\s+\d+\s+of\s+[\d,]+\b/i.test(text)) ?? null;
 
       return {
         title: document.title,
         url: location.href,
         paginationText,
+        resultsHeadingText,
+        matchedRecordsText,
+        visibleQueryText,
         bodyText: document.body.innerText,
       };
     });
@@ -148,21 +168,27 @@ export class WosAdapter extends BaseSearchProviderAdapter {
       title: info.title,
       paginationText: info.paginationText,
       currentQuery: storedQuery,
+      resultsHeadingText: info.resultsHeadingText,
+      matchedRecordsText: info.matchedRecordsText,
+      visibleQueryText: info.visibleQueryText,
     });
+    const totalResults = parsed.totalResults ?? storedHits?.found ?? null;
+    const totalResultsText = parsed.totalResultsText ?? (totalResults ? totalResults.toLocaleString("en-US") : null);
 
     return {
       provider: "wos",
       query: parsed.query ?? "",
-      totalResultsText: parsed.totalResultsText,
-      totalResults: parsed.totalResults,
+      totalResultsText,
+      totalResults,
       currentPage: parsed.currentPage ?? 1,
       totalPages: parsed.totalPages,
       pageSize: 50,
-      queryId: extractWosQueryId(info.url),
+      queryId,
       sort: /\/summary\/[^/]+\/([^/]+)\//.exec(info.url)?.[1] ?? "relevance",
       raw: {
         ...info,
         storedQuery,
+        storedHits,
       },
     };
   }
@@ -186,17 +212,42 @@ export class WosAdapter extends BaseSearchProviderAdapter {
             (container.querySelector('a[href*="/full-record/"]') as HTMLAnchorElement | null) ??
             (container.querySelector("h1 a, h2 a, h3 a, a") as HTMLAnchorElement | null);
           const lines = container.innerText.split("\n").map((line) => line.trim()).filter(Boolean);
-          const title = titleLink?.textContent?.trim() ?? lines[0] ?? `Result ${index + 1}`;
-          const abstractLine = lines.find((line) => /abstract/i.test(line)) ?? lines.slice(3).join(" ");
+          const cleanInlineText = (value: string | null | undefined) =>
+            value
+              ?.replace(/(?:arrow_drop_down|expand_more|more_horiz)/gi, " ")
+              .replace(/\b(?:Show more|Show less|Full text at publisher|Free Full Text from Publisher|Enriched Cited References|Related records)\b/gi, " ")
+              .replace(/\s+/g, " ")
+              .trim() ?? "";
+          const isNoiseLine = (value: string) => /^(?:Citation|Citations|References|\d+)$/i.test(value);
+          const title = cleanInlineText(titleLink?.textContent) || lines[0] || `Result ${index + 1}`;
+          const titleLineIndex = lines.findIndex((line) => cleanInlineText(line) === title);
+          const contentLines = (titleLineIndex >= 0 ? lines.slice(titleLineIndex + 1) : lines.slice(1))
+            .map((line) => cleanInlineText(line))
+            .filter(Boolean);
+          const authorsText = contentLines[0] || null;
+          const detailLines = contentLines.slice(1);
+          const abstractStartIndex = detailLines.findIndex((line) => {
+            const wordCount = line.split(/\s+/).filter(Boolean).length;
+            return line.length >= 120 || (wordCount >= 12 && /[.!?]$/.test(line));
+          });
+          const sourceLines = (abstractStartIndex >= 0 ? detailLines.slice(0, abstractStartIndex) : detailLines.slice(0, 3))
+            .filter((line) => !isNoiseLine(line));
+          const abstractLines = (abstractStartIndex >= 0 ? detailLines.slice(abstractStartIndex) : detailLines.slice(3))
+            .filter((line) => !isNoiseLine(line));
+          const sourceText = cleanInlineText(sourceLines.join(" ")) || null;
+          const yearText = contentLines
+            .map((line) => /\b(19|20)\d{2}\b/.exec(line)?.[0] ?? null)
+            .find((value): value is string => value !== null) ?? null;
+          const abstractPreview = includeAbstracts ? cleanInlineText(abstractLines.join(" ")) || null : null;
           return {
             provider: "wos",
             indexOnPage: index + 1,
             title,
             href: titleLink?.href ?? null,
-            authorsText: lines[1] ?? null,
-            sourceText: lines[2] ?? null,
-            yearText: lines.find((line) => /\b(19|20)\d{2}\b/.test(line)) ?? null,
-            abstractPreview: includeAbstracts ? abstractLine : null,
+            authorsText,
+            sourceText,
+            yearText,
+            abstractPreview,
             selectable: Boolean(container.querySelector('input[type="checkbox"]')),
             raw: { text: container.innerText.slice(0, 4000) },
           };
@@ -209,25 +260,33 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   override async listFilters(context: ProviderContext): Promise<FilterGroup[]> {
     const filters = await context.page.evaluate(() => {
-      const groups = Array.from(document.querySelectorAll('[role="group"]')).filter((group) => {
-        const checkboxCount = group.querySelectorAll('input[type="checkbox"], [role="checkbox"]').length;
-        return checkboxCount > 0;
-      });
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim() ?? null;
+      const refinePanel = document.querySelector('form[aria-label="Refine panel"]');
+      if (!refinePanel) {
+        return [];
+      }
 
-      return groups.slice(0, 20).map((group) => {
-        const labelledBy = group.getAttribute("aria-labelledby");
+      const sections = Array.from(refinePanel.querySelectorAll('fieldset.filter-section[id^="filter-section-"]'));
+      return sections.slice(0, 20).map((section) => {
         const label =
-          group.getAttribute("aria-label")?.trim() ??
-          (labelledBy ? document.getElementById(labelledBy)?.textContent?.trim() : null) ??
-          group.querySelector("h2, h3, h4, legend")?.textContent?.trim() ??
+          normalize(section.querySelector('legend.filter-heading')?.textContent) ??
+          normalize(section.querySelector('button.filter-heading.legend-button[aria-controls]')?.textContent) ??
           null;
 
-        const options = Array.from(group.querySelectorAll("label"))
-          .map((option) => option.textContent?.replace(/\s+/g, " ").trim() ?? "")
-          .filter((value) => value.length > 1)
-          .filter((value) => !/Refine button|Click to filter/i.test(value))
-          .slice(0, 10)
-          .map((value) => ({ value, label: value }));
+        const options = Array.from(section.querySelectorAll('input.mdc-checkbox__native-control[name][value][aria-label]'))
+          .map((option) => normalize(option.getAttribute("aria-label")))
+          .map((value) => {
+            if (!value) {
+              return null;
+            }
+
+            const labelMatch = /^(.*?)\.\s+[\d,]+\s+matching records\b/i.exec(value);
+            const optionLabel = normalize(labelMatch?.[1] ?? value);
+            return optionLabel ? { value: optionLabel, label: optionLabel } : null;
+          })
+          .filter((option): option is { value: string; label: string } => option !== null)
+          .filter((option, index, all) => all.findIndex((candidate) => candidate.value === option.value) === index)
+          .slice(0, 10);
 
         return label ? { key: label, label, type: "checkbox", options } : null;
       }).filter((group) => group && group.options.length > 0);
@@ -238,19 +297,39 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   override async applyFilters(context: ProviderContext, input: FilterApplyRequest[]): Promise<SearchSummary> {
     for (const filter of input) {
       const groupLabel = wosFilterKeyToLabel[filter.key] ?? filter.key;
-      const group = context.page.getByRole("group", { name: new RegExp(groupLabel, "i") }).first();
-      if (!(await group.isVisible().catch(() => false))) continue;
+      const sectionId = await this.findWosFilterSectionId(context, groupLabel);
+      if (!sectionId) {
+        continue;
+      }
+
+      const section = context.page.locator(`#${cssEscape(sectionId)}`).first();
+      if (!(await section.isVisible().catch(() => false))) {
+        continue;
+      }
 
       for (const value of filter.values ?? []) {
-        const option = group.getByLabel(new RegExp(escapeRegExp(value), "i")).first();
+        let option = section.getByRole("checkbox", { name: new RegExp(`^${escapeRegExp(value)}(?:\\.|$)`, "i") }).first();
+        if (!(await option.isVisible().catch(() => false))) {
+          const toggle = section.locator('button.filter-heading.legend-button[aria-controls]').first();
+          if (await toggle.isVisible().catch(() => false)) {
+            await toggle.click({ force: true }).catch(() => undefined);
+          }
+          option = section.getByRole("checkbox", { name: new RegExp(`^${escapeRegExp(value)}(?:\\.|$)`, "i") }).first();
+        }
+
         if (await option.isVisible().catch(() => false)) {
-          await option.check({ force: true }).catch(async () => { await option.click({ force: true }); });
+          await option.scrollIntoViewIfNeeded().catch(() => undefined);
+          await option.check({ force: true }).catch(async () => {
+            await option.click({ force: true });
+          });
         }
       }
 
-      const refineButton = group.getByLabel(/Refine button|Click to filter/i).first();
+      const refineButton = section.locator('button[data-ta="refine-submit"][aria-label^="Refine button"]').first();
       if (await refineButton.isVisible().catch(() => false)) {
-        await runWithPageLoad(context.page, async () => { await refineButton.click({ force: true }); });
+        await runWithPageLoad(context.page, async () => {
+          await refineButton.click({ force: true });
+        });
       }
     }
     return this.readSearchSummary(context);
@@ -268,10 +347,9 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   override async clearSelection(context: ProviderContext): Promise<void> {
     const checked = context.page.locator(
-      [
-        'app-summary-record input[type="checkbox"]:checked',
-        '[data-ta="summary-record"] input[type="checkbox"]:checked',
-      ].join(", "),
+      this.selectors.resultCards
+        .map((sel) => `${sel} input[type="checkbox"]:checked`)
+        .join(", "),
     );
     const count = await checked.count();
     for (let i = 0; i < count; i += 1) {
@@ -299,6 +377,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   async exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
     await this.clearInterferingUi(context);
+    this.debugExport("start", { scope: request.scope, targetFormat: request.targetFormat });
 
     if (request.scope === "selected" && request.selectedIndices?.length) {
       await this.clearSelection(context);
@@ -308,29 +387,24 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     const exportButton = await this.findExportButton(context);
     await exportButton.click({ force: true });
     await this.resolveBlockingOverlays(context, "opening the export menu");
+    this.debugExport("menu opened");
 
     const exportMenu = context.page
-      .locator(".cdk-overlay-pane, [role='menu'], .mat-mdc-menu-panel")
-      .filter({ hasText: /RIS \(other reference software\)|^RIS\b/i })
-      .last();
+      .getByRole("menu")
+      .filter({ has: context.page.getByRole("menuitem", { name: /^RIS \(other reference software\)$/i }) })
+      .first();
     await exportMenu.waitFor({ state: "visible", timeout: 15_000 }).catch(async (error) => {
       await this.resolveBlockingOverlays(context, "opening the RIS export menu");
       throw error;
     });
 
-    const risMenuItem = exportMenu.locator("button, [role='menuitem']").filter({
-      hasText: /RIS \(other reference software\)|^RIS\b/i,
-    }).first();
+    const risMenuItem = exportMenu.getByRole("menuitem", { name: /^RIS \(other reference software\)$/i }).first();
     await risMenuItem.click({ force: true });
     await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
+    this.debugExport("ris menu clicked");
 
-    const exportDialog = context.page.locator("mat-dialog-container, [role='dialog'], .cdk-overlay-pane, app-export-overlay").filter({
-      hasText: /Export Records to RIS File/i,
-    }).last();
-    await exportDialog.waitFor({ state: "visible", timeout: 15_000 }).catch(async (error) => {
-      await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
-      throw error;
-    });
+    const exportDialog = await this.findRisExportDialog(context);
+    this.debugExport("dialog visible");
 
     if (request.scope === "page") {
       const pageRadio = exportDialog.getByRole("radio", { name: /All records on page/i }).first();
@@ -347,19 +421,32 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
     const confirm = exportDialog.getByRole("button", { name: /^Export$/i }).first();
     await confirm.waitFor({ state: "visible", timeout: 15_000 });
+    this.debugExport("confirm visible");
 
-    const downloadPromise = context.page.waitForEvent("download", { timeout: 30_000 }).catch(async (error) => {
+    const exportResponsePromise = context.page.waitForResponse(
+      (response) =>
+        response.url().includes("/api/wosnx/indic/export/saveToFile") &&
+        response.request().method() === "POST",
+      { timeout: 30_000 },
+    ).catch(async (error) => {
       await this.resolveBlockingOverlays(context, "downloading the RIS export");
       throw error;
     });
-    const [download] = await Promise.all([
-      downloadPromise,
+    const [exportResponse] = await Promise.all([
+      exportResponsePromise,
       confirm.click({ force: true }),
     ]);
+    this.debugExport("response received", { status: exportResponse.status() });
 
-    const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `wos-export-${Date.now()}.ris`);
-    await download.saveAs(targetPath);
+    if (!exportResponse.ok()) {
+      throw new Error(`Web of Science RIS export failed with status ${exportResponse.status()}.`);
+    }
+
+    const risText = await exportResponse.text();
+    const fileName = `wos-export-${Date.now()}.ris`;
+    const targetPath = path.join(context.downloadsDir, fileName);
+    await writeTextFile(targetPath, risText.endsWith("\n") ? risText : `${risText}\n`);
+    this.debugExport("file written", { targetPath });
 
     return {
       provider: "wos",
@@ -367,7 +454,8 @@ export class WosAdapter extends BaseSearchProviderAdapter {
       path: targetPath,
       fileName,
       raw: {
-        url: download.url(),
+        url: exportResponse.url(),
+        status: exportResponse.status(),
         scope: request.scope,
         start: request.start,
         end: request.end,
@@ -422,7 +510,8 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     if (queryBox) return;
     const tab = await this.findFirstVisible(context, this.selectors.queryBuilderTab).catch(() => null);
     if (tab) {
-      await runWithPageLoad(context.page, async () => { await tab.click(); });
+      await tab.click();
+      await context.page.waitForLoadState("domcontentloaded");
     }
   }
 
@@ -446,7 +535,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     if (analyzedButton) return analyzedButton;
 
     for (const selector of this.selectors.searchButtons) {
-      const locator = context.page.locator(selector).filter({ hasText: /^Search$/ }).first();
+      const locator = context.page.locator(selector).filter({ hasText: /Search/ }).first();
       if (await locator.isVisible().catch(() => false)) return locator;
     }
 
@@ -454,6 +543,12 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   private async findExportButton(context: ProviderContext) {
+    const summaryToolbar = context.page.getByRole("region", { name: /summaryRecordsTop/i }).first();
+    if (await summaryToolbar.isVisible().catch(() => false)) {
+      const toolbarButton = summaryToolbar.getByRole("button", { name: /^Export$/i }).first();
+      if (await toolbarButton.isVisible().catch(() => false)) return toolbarButton;
+    }
+
     const primaryButton = context.page
       .locator("button.mat-mdc-menu-trigger.new-wos-btn-style")
       .filter({ hasText: /^Export\b/i })
@@ -473,6 +568,45 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     }
 
     throw new Error("Unable to find the primary Web of Science export button.");
+  }
+
+  private async findRisExportDialog(context: ProviderContext): Promise<Locator> {
+    // Target the `.window` container inside `app-export-overlay` rather than
+    // the custom element itself — Angular components default to
+    // `display: inline` which Playwright treats as zero-size / hidden.
+    const dialog = context.page
+      .locator("app-export-overlay .window")
+      .filter({
+        has: context.page.locator("h1", { hasText: /Export Records to RIS File/i }),
+      })
+      .first();
+
+    // Wait for the Angular overlay route to activate — do NOT accept the mere
+    // existence of `app-export-overlay` because the element may already be in
+    // the DOM as a hidden component shell from a previous export.
+    await context.page.waitForFunction(
+      () => location.href.includes("(overlay:export/ris)"),
+      undefined,
+      { timeout: 30_000 },
+    ).catch(async (error) => {
+      await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
+      throw error;
+    });
+
+    await dialog.waitFor({ state: "visible", timeout: 30_000 }).catch(async (error) => {
+      await this.resolveBlockingOverlays(context, "opening the RIS export dialog");
+      throw error;
+    });
+
+    return dialog;
+  }
+
+  private debugExport(step: string, data?: Record<string, unknown>): void {
+    if (!DEBUG_WOS_EXPORT) {
+      return;
+    }
+
+    console.log(`[wos export] ${step}`, data ?? "");
   }
 
   private async findSearchButtonByCandidateAnalysis(context: ProviderContext) {
@@ -554,6 +688,25 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     return null;
   }
 
+  private async findWosFilterSectionId(context: ProviderContext, label: string): Promise<string | null> {
+    return context.page.evaluate((requestedLabel) => {
+      const normalize = (value: string | null | undefined) => value?.replace(/\s+/g, " ").trim().toLowerCase() ?? "";
+      const expected = normalize(requestedLabel);
+      const sections = Array.from(document.querySelectorAll('form[aria-label="Refine panel"] fieldset.filter-section[id^="filter-section-"]'));
+      const matchingSection = sections.find((section) => {
+        if (!(section instanceof HTMLFieldSetElement)) {
+          return false;
+        }
+
+        const legendText = normalize(section.querySelector('legend.filter-heading')?.textContent);
+        const buttonText = normalize(section.querySelector('button.filter-heading.legend-button[aria-controls]')?.textContent);
+        return legendText === expected || buttonText === expected || Boolean(buttonText && buttonText.startsWith(`${expected} `));
+      });
+
+      return matchingSection instanceof HTMLFieldSetElement ? matchingSection.id : null;
+    }, label);
+  }
+
   private async readStoredQuery(context: ProviderContext): Promise<string | null> {
     return context.page.evaluate((queryId) => {
       if (!queryId) {
@@ -566,6 +719,43 @@ export class WosAdapter extends BaseSearchProviderAdapter {
         return null;
       }
     }, extractWosQueryId(context.page.url())).then((value) => parseWosStoredQuery(value));
+  }
+
+  private async readStoredHits(
+    context: ProviderContext,
+    queryId: string | null,
+  ): Promise<{ found: number | null; available: number | null } | null> {
+    return context.page.evaluate((id) => {
+      if (!id) {
+        return null;
+      }
+
+      try {
+        const raw = localStorage.getItem(`wos_search_hits_${id}`);
+        if (!raw) {
+          return null;
+        }
+
+        const parsed = JSON.parse(raw) as { found?: unknown; available?: unknown };
+        const toNumber = (value: unknown) => {
+          if (typeof value === "number" && Number.isFinite(value)) {
+            return value;
+          }
+          if (typeof value === "string") {
+            const numeric = Number(value.replace(/,/g, ""));
+            return Number.isFinite(numeric) ? numeric : null;
+          }
+          return null;
+        };
+
+        return {
+          found: toNumber(parsed.found),
+          available: toNumber(parsed.available),
+        };
+      } catch {
+        return null;
+      }
+    }, queryId);
   }
 
   private async findResultSelectionCheckboxByIndex(context: ProviderContext, index: number) {
@@ -601,6 +791,15 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   private async closeCookiePreferenceCenter(context: ProviderContext): Promise<void> {
+    // Try the "Accept all" banner button first (OneTrust cookie consent)
+    const acceptAll = context.page.locator("#onetrust-accept-btn-handler").first();
+    if (await acceptAll.isVisible().catch(() => false)) {
+      await acceptAll.click({ force: true });
+      await acceptAll.waitFor({ state: "hidden", timeout: 15_000 }).catch(() => undefined);
+      return;
+    }
+
+    // Fallback: close the cookie preference center panel
     const closeButton = context.page.locator("#close-pc-btn-handler").first();
     if (!(await closeButton.isVisible().catch(() => false))) return;
     await closeButton.click({ force: true });
@@ -667,6 +866,20 @@ function extractInstitution(bodyText: string): string | null {
   if (/Peking University/i.test(bodyText)) return "Peking University";
   return null;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

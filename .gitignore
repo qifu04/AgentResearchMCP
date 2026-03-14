@@ -28,6 +28,9 @@ docs/*.console.txt
 docs/*.network.txt
 docs/tmp-*
 
+# Temporary debug/test scripts and artifacts
+.tmp-*
+
 # OS
 Thumbs.db
 Desktop.ini

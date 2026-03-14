@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import type {
   ExportCapability,
   ExportRequest,
@@ -10,8 +10,10 @@ import type {
 } from "../provider-contract.js";
 import {
   clickIfVisible,
+  fillAndVerify,
   normalizeWhitespace,
   readLocatorValue,
+  runWithPageLoad,
   textContentOrNull,
 } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
@@ -26,6 +28,11 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   readonly selectors = ieeeSelectors;
   readonly queryParamName = "queryText";
   readonly submitUrlPattern = /queryText=/;
+
+  override async openAdvancedSearch(context: ProviderContext): Promise<void> {
+    await super.openAdvancedSearch(context);
+    await this.waitForAdvancedSearchReady(context);
+  }
 
   override async clearInterferingUi(context: ProviderContext): Promise<void> {
     await super.clearInterferingUi(context);
@@ -70,13 +77,40 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       return query;
     }
 
-    const input = await this.findQueryInput(context).catch(() => null);
+    const input = await this.findAdvancedQueryInput(context).catch(() => null);
     if (!input) {
       return null;
     }
 
     return readLocatorValue(input);
   }
+
+  override async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
+    const input = await this.findAdvancedQueryInput(context);
+    await runWithPageLoad(context.page, async () => {
+      await fillAndVerify(input, query);
+    });
+  }
+
+  override async submitSearch(context: ProviderContext): Promise<SearchSummary> {
+    await this.waitForAdvancedSearchReady(context);
+    const button = await this.findAdvancedSearchButton(context);
+    await runWithPageLoad(context.page, async () => {
+      await Promise.all([
+        context.page.waitForURL(this.submitUrlPattern, { timeout: 30_000 }).catch(() => undefined),
+        button.click(),
+      ]);
+    });
+
+    // IEEE loads results asynchronously — wait for result items or the summary header
+    await this.clearInterferingUi(context);
+    await context.page.locator("xpl-results-item, xpl-search-dashboard .Dashboard-header h1").first()
+      .waitFor({ state: "visible", timeout: 30_000 })
+      .catch(() => undefined);
+
+    return this.readSearchSummary(context);
+  }
+
 
   async readSearchSummary(context: ProviderContext): Promise<SearchSummary> {
     const info = await context.page.evaluate(() => ({
@@ -342,6 +376,7 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     };
   }
 
+
   private async selectAllOnPage(context: ProviderContext): Promise<void> {
     const checkbox = context.page.locator(".results-actions-selectall-checkbox").first();
     await checkbox.waitFor({ state: "visible", timeout: 10_000 });
@@ -351,6 +386,31 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
         await checkbox.click({ force: true });
       });
     }
+  }
+
+  private async waitForAdvancedSearchReady(context: ProviderContext): Promise<void> {
+    const loading = context.page.getByText(/^Loading\.\.\.$/i).first();
+    await loading.waitFor({ state: "hidden", timeout: 15_000 }).catch(() => undefined);
+
+    for (const selector of this.selectors.queryInputs) {
+      const locator = context.page.locator(selector).first();
+      await locator.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
+      if (await locator.isVisible().catch(() => false)) {
+        return;
+      }
+    }
+
+    throw new Error(`Unable to find visible IEEE advanced-search input for selectors: ${this.selectors.queryInputs.join(", ")}`);
+  }
+
+  private async findAdvancedQueryInput(context: ProviderContext) {
+    await this.waitForAdvancedSearchReady(context);
+    return this.findFirstVisible(context, this.selectors.queryInputs);
+  }
+
+  private async findAdvancedSearchButton(context: ProviderContext) {
+    await this.waitForAdvancedSearchReady(context);
+    return this.findFirstVisible(context, this.selectors.searchButtons);
   }
 
   private async openExportDialog(context: ProviderContext) {
@@ -366,6 +426,8 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     return dialog;
   }
 }
+
+
 
 
 

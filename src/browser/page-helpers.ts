@@ -83,7 +83,10 @@ export async function fillAndVerify(locator: Locator, value: string): Promise<vo
 
 export async function waitForDocumentReady(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
-  await page.waitForLoadState("networkidle").catch(() => undefined);
+  // Use a short timeout for networkidle — sites like WoS keep background
+  // requests alive (analytics, telemetry) that prevent networkidle from
+  // resolving.  A 5-second grace period is enough for most real content loads.
+  await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
 export async function runWithPageLoad<T>(page: Page, action: () => Promise<T>): Promise<T> {

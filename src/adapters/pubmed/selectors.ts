@@ -17,9 +17,8 @@ export const pubmedSelectors: AdapterSelectors = {
     "article",
   ],
   filterGroups: [
-    "#static-filters .form-field.filters-field",
-    "#static-filters .choice-group",
-    "#static-filters .usa-accordion-content .choice-group",
+    '#static-filters .choice-group-wrapper[role="group"][aria-label="Filters"] > .choice-group',
+    '#additional_filters.choice-group-wrapper[role="group"][aria-label="Additional filters"] > .choice-group',
     "#static-filters .timeline-filter",
   ],
   sendToButtons: [
