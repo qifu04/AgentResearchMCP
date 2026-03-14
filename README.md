@@ -58,6 +58,24 @@ npm run start:http
 claude mcp add agent-research --transport http http://localhost:3100/mcp
 ```
 
+### OpenAI Codex CLI
+
+```bash
+codex mcp add agent-research --url http://localhost:3100/mcp
+```
+
+添加后可检查是否生效：
+
+```bash
+codex mcp list
+```
+
+如果你修改了端口，例如使用 `8080`：
+
+```bash
+codex mcp add agent-research --url http://localhost:8080/mcp
+```
+
 ### Cursor
 
 Settings → MCP Servers，或编辑 `.cursor/mcp.json`：
