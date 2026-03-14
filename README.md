@@ -1,107 +1,66 @@
 # Agent Research MCP
 
-Playwright 驱动的 MCP 服务器，让 AI 代理能够在多个学术数据库上执行文献检索。通过自动化真实浏览器会话，完成登录检测、查询输入、搜索执行、结果抓取、筛选和导出等操作。
+Playwright 驱动的 MCP 服务器，让 AI 代理能够在多个学术数据库上执行文献检索。
+通过自动化真实浏览器会话，完成登录检测、检索式构建、结果评估、迭代优化和 RIS 导出。
 
-支持的数据库：Web of Science、PubMed、IEEE Xplore、Scopus
+支持的数据库：Web of Science · PubMed · IEEE Xplore · Scopus
 
-## 前置要求
+## 快速开始
 
-- Node.js >= 18
-- npm
+### 前置要求
 
-## 安装
+- [Node.js](https://nodejs.org/) >= 18
+- Windows 系统（.bat 脚本）
+
+### 首次安装
+
+双击 `install.bat`，它会自动完成以下步骤：
+
+1. 安装 npm 依赖
+2. 安装 Playwright Chromium 浏览器
+3. 编译 TypeScript
+
+或者手动执行：
 
 ```bash
-git clone <repo-url>
-cd AgentRearchMCP
 npm install
-```
-
-安装 Playwright 浏览器（首次运行需要）：
-
-```bash
 npx playwright install chromium
-```
-
-## 构建与启动
-
-```bash
-# 编译 TypeScript
 npm run build
-
-# 启动 HTTP 服务器（默认端口 3100）
-npm run start:http
-
-# 开发模式（tsx 直接运行，无需 build）
-npm run dev:http
-
-# 自定义端口
-MCP_PORT=8080 npm run start:http
 ```
 
-也可以直接双击项目根目录下的 `start-http.bat`（Windows），它会自动杀掉占用 3100 端口的旧进程后启动服务。
+### 启动服务器
 
-启动后可通过健康检查确认服务运行：
+双击 `start-http.bat`，服务器默认运行在 `http://localhost:3100`。
+
+脚本会自动关闭占用 3100 端口的旧进程，然后启动服务。
+
+启动后可通过健康检查确认：
 
 ```bash
 curl http://localhost:3100/health
 # {"ok":true,"sessions":0}
 ```
 
-服务器暴露以下端点：
+### 自定义端口
 
-| 端点 | 方法 | 说明 |
-|------|------|------|
-| `/mcp` | POST/GET/DELETE | Streamable HTTP 传输（MCP 2025-03-26 协议） |
-| `/sse` | GET | Legacy SSE 传输（MCP 2024-11-05 协议） |
-| `/messages` | POST | Legacy SSE 消息端点 |
-| `/health` | GET | 健康检查 |
+```bash
+set MCP_PORT=8080
+npm run start:http
+```
 
-## 作为 MCP 服务添加到 AI 工具
+## 连接到 AI 工具
 
-所有配置均使用 HTTP 传输方式，需要先启动服务器（`npm run start:http`），然后在各工具中配置 URL。
+启动服务器后，在 AI 工具中配置 MCP 连接。
 
 ### Claude Code
 
 ```bash
-# 项目级
-claude mcp add agent-research --transport http http://localhost:3100/mcp --scope project
-
-# 用户级
-claude mcp add agent-research --transport http http://localhost:3100/mcp --scope user
-```
-
-或手动编辑配置文件（项目级 `.claude/settings.json`，用户级 `~/.claude/settings.json`）：
-
-```json
-{
-  "mcpServers": {
-    "agent-research": {
-      "type": "url",
-      "url": "http://localhost:3100/mcp"
-    }
-  }
-}
-```
-
-### OpenAI Codex CLI
-
-编辑 `~/.codex/config.json`（如不存在则创建）：
-
-```json
-{
-  "mcpServers": {
-    "agent-research": {
-      "type": "url",
-      "url": "http://localhost:3100/mcp"
-    }
-  }
-}
+claude mcp add agent-research --transport http http://localhost:3100/mcp
 ```
 
 ### Cursor
 
-编辑项目根目录下的 `.cursor/mcp.json`，或通过 Settings → MCP Servers 添加：
+Settings → MCP Servers，或编辑 `.cursor/mcp.json`：
 
 ```json
 {
@@ -113,7 +72,7 @@ claude mcp add agent-research --transport http http://localhost:3100/mcp --scope
 }
 ```
 
-如果 Cursor 版本不支持 Streamable HTTP，可使用 SSE 方式：
+旧版 Cursor 使用 SSE 方式：
 
 ```json
 {
@@ -125,43 +84,73 @@ claude mcp add agent-research --transport http http://localhost:3100/mcp --scope
 }
 ```
 
-## 可用工具一览
+### Kiro / 其他 MCP 客户端
+
+编辑项目根目录 `.mcp.json`（已在 .gitignore 中）：
+
+```json
+{
+  "mcpServers": {
+    "agent-research": {
+      "type": "http",
+      "url": "http://localhost:3100/mcp"
+    }
+  }
+}
+```
+
+## 服务端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/mcp` | POST/GET/DELETE | Streamable HTTP（MCP 2025-03-26） |
+| `/sse` | GET | Legacy SSE（MCP 2024-11-05） |
+| `/messages` | POST | Legacy SSE 消息端点 |
+| `/health` | GET | 健康检查 |
+
+## 工作流程
+
+```
+Phase A: 会话建立
+  create_session → open_advanced_search → get_login_state → wait_for_login → get_query_language_profile
+
+Phase B: 迭代检索（重复直到满意）
+  1. 构建检索式（筛选条件直接写入检索式）
+  2. run_search → 检查结果数量
+  3. read_result_sample → 评估标题相关性
+  4. read_result_sample → 从摘要中提取关键词
+  5. 用新关键词优化检索式 → 回到步骤 2
+
+Phase C: 导出
+  export_results → close_session
+```
+
+调用 `get_workflow_guide` 工具可获取完整的操作指南。
+
+## 可用工具
 
 | 工具 | 说明 |
 |------|------|
 | `list_providers` | 列出支持的数据库 |
+| `get_workflow_guide` | 获取完整操作指南 |
 | `create_session` | 创建浏览器会话 |
 | `list_sessions` / `get_session` / `close_session` | 会话管理 |
 | `open_advanced_search` | 打开高级检索页面 |
 | `get_login_state` / `wait_for_login` | 登录状态检测与等待 |
-| `get_query_language_profile` | 获取检索语法说明 |
+| `get_query_language_profile` | 获取检索语法（字段标签、运算符、示例） |
 | `set_query` / `read_current_query` | 设置/读取检索式 |
-| `run_search` | 执行检索 |
-| `read_search_summary` / `read_result_sample` | 读取检索结果摘要与样本 |
-| `list_filters` / `apply_filters` | 筛选条件管理 |
+| `run_search` | 执行检索并返回结果摘要 |
+| `read_search_summary` / `read_result_sample` | 读取结果摘要与样本（含摘要） |
 | `select_results` / `clear_selection` | 选择结果条目 |
-| `get_export_capability` / `export_results` | 导出结果 |
-| `convert_export_to_ris` | 转换为 RIS 格式 |
-| `capture_session_artifacts` | 捕获调试快照 |
-
-## 典型使用流程
-
-```
-create_session(provider: "wos")
-  → open_advanced_search
-  → get_login_state / wait_for_login
-  → get_query_language_profile
-  → set_query / run_search
-  → read_search_summary / read_result_sample
-  → apply_filters
-  → export_results
-  → close_session
-```
+| `get_export_capability` / `export_results` | 导出结果为 RIS |
+| `convert_export_to_ris` | 将 NBIB/CSV 转换为 RIS |
+| `capture_session_artifacts` | 捕获 DOM/截图/网络日志用于调试 |
 
 ## 开发
 
 ```bash
+npm run build        # 编译 TypeScript → dist/
+npm run dev:http     # 开发模式（tsx 直接运行，无需 build）
 npm run check        # 类型检查
 npm run test         # 运行测试
-npm run test:watch   # 监听模式测试
 ```
