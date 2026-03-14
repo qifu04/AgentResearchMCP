@@ -5,6 +5,7 @@ import { buildEnvelope, buildErrorEnvelope } from "../core/response-envelope.js"
 import { isManualInterventionRequiredError } from "../core/manual-intervention.js";
 import { ProviderRegistry } from "../adapters/registry.js";
 import { SearchService } from "../services/search-service.js";
+import { WORKFLOW_GUIDE } from "./workflow-guide.js";
 
 export function registerTools(server: McpServer, service: SearchService, providers: ProviderRegistry): void {
   server.registerTool(
@@ -437,6 +438,20 @@ export function registerTools(server: McpServer, service: SearchService, provide
       okResult({
         ok: true,
         providers: providers.listDescriptors(),
+      }),
+  );
+
+  server.registerTool(
+    "get_workflow_guide",
+    {
+      title: "Get Workflow Guide",
+      description: "Returns a comprehensive guide for AI agents on the correct order and method to use all MCP tools.",
+      inputSchema: {},
+    },
+    async () =>
+      okResult({
+        ok: true,
+        guide: WORKFLOW_GUIDE,
       }),
   );
 }
