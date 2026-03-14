@@ -23,79 +23,161 @@ Always check \`ok\` and \`nextActions\` in every response.
 | ieee     | IEEE Xplore                       | Yes            | Institutional or personal      |
 | scopus   | Scopus                            | Yes            | Institutional or personal      |
 
-## Canonical Workflow
+## Workflow Overview
 
-### Step 1: list_providers
+The complete literature search workflow has two layers:
+1. **Session Setup** (one-time): create session -> login -> get query syntax
+2. **Iterative Search Loop** (repeat): build query -> search -> evaluate -> refine -> export
+
+Phase A: Session Setup
+  list_providers -> create_session -> open_advanced_search ->
+  get_login_state -> (wait_for_login) -> get_query_language_profile
+        |
+        v
+Phase B: Iterative Search & Refinement (repeat until satisfied)
+  1. Construct/refine search query
+  2. run_search -> check totalResults
+  3. read_result_sample -> evaluate title relevance
+  4. read_result_sample (with abstracts) -> extract keywords
+  5. Refine query with new keywords/terms
+  6. (optional) apply_filters to narrow results
+  7. Repeat from step 1 if not satisfied
+        |
+        v
+Phase C: Export & Cleanup
+  export_results -> (convert_export_to_ris) -> close_session
+
+---
+
+## Phase A: Session Setup
+
+### A1. list_providers
 - Input: none
 - Returns: Array of provider descriptors with capabilities.
 - Use this to discover available providers and their features.
 
-### Step 2: create_session
+### A2. create_session
 - Input: \`provider\` (required), \`persistentProfile\` (optional, boolean)
 - Returns: \`sessionId\` — use this in all subsequent calls.
 - Set \`persistentProfile: true\` to reuse login cookies across sessions.
 - A headed browser window opens automatically.
 
-### Step 3: open_advanced_search
+### A3. open_advanced_search
 - Input: \`sessionId\`
 - Navigates the browser to the provider's advanced search page.
 - Automatically dismisses cookie banners and overlays.
 - MUST be called before any search operations.
 
-### Step 4: get_login_state
+### A4. get_login_state
 - Input: \`sessionId\`
 - Returns: \`LoginState\` with \`kind\`, \`canSearch\`, \`canExport\`, \`institutionAccess\`.
-- If \`canSearch: true\` → proceed to Step 6.
-- If \`canSearch: false\` → proceed to Step 5 (wait_for_login).
+- If \`canSearch: true\` -> proceed to A6.
+- If \`canSearch: false\` -> proceed to A5 (wait_for_login).
 
-### Step 5: wait_for_login (conditional)
+### A5. wait_for_login (conditional)
 - Input: \`sessionId\`, \`capability\` ("search" | "export" | "personal"), \`timeoutMs\`, \`pollMs\`
 - Only needed when get_login_state shows \`canSearch: false\`.
 - Brings the browser window to the foreground for the user to log in manually.
 - Polls until the user completes login and returns to the search page.
 - Default timeout: 5 minutes. Increase for slow institutional SSO flows.
 
-### Step 6: get_query_language_profile
+### A6. get_query_language_profile
 - Input: \`sessionId\`
 - Returns: Field tags, boolean operators, wildcards, examples, constraints.
 - READ THIS before constructing your query to use the correct syntax.
 - Each provider has different field codes (e.g., PubMed uses [MeSH], WOS uses TS=).
 
-### Step 7: run_search (preferred) or set_query + submit
-- Input: \`sessionId\`, \`query\` (optional), \`sampleSize\` (1-20, default 5)
-- \`run_search\` with a \`query\` parameter is the single-call shortcut:
-  it sets the query, submits, and returns results in one step.
-- Returns: Full search observation — summary, result sample, filters, export capability.
-- Alternative: call \`set_query\` then \`run_search\` without query param.
-- Do NOT call both \`set_query\` AND \`run_search\` with query (double-sets the query).
+---
 
-### Step 8: Inspect Results (optional)
-- \`read_search_summary\`: Re-read total results, pagination info.
-- \`read_result_sample\`: Read first N result titles, authors, abstracts.
-- \`list_filters\`: See available filter facets (year, document type, etc.).
+## Phase B: Iterative Search & Refinement
 
-### Step 9: apply_filters (optional)
-- Input: \`sessionId\`, \`filters\` (array of \`{key, values}\`)
-- Filter keys come from the \`list_filters\` response.
-- Returns updated search observation after applying filters.
+This is the core research loop. Repeat until the results meet the user's requirements.
+
+### B1. Construct the initial search query
+- Based on the user's research topic, build a boolean query using the
+  provider's syntax from \`get_query_language_profile\`.
+- Start broad: use core concepts connected with AND.
+- Example: "deep learning" AND "medical imaging"
+
+### B2. run_search
+- Input: \`sessionId\`, \`query\`, \`sampleSize\` (1-20, default 5)
+- Submits the query and returns: summary (totalResults), result sample,
+  filters, and export capability — all in one call.
+- Check \`totalResults\`: too many (>10,000)? too few (<50)? Adjust in B5.
+
+### B3. Evaluate titles — are results relevant?
+- Use \`read_result_sample\` with a reasonable limit (e.g., 10-20).
+- Scan the titles: Do they match the research topic?
+- If most titles are off-topic, the query needs major revision -> go to B5.
+- If titles look promising, proceed to B4 for deeper inspection.
+
+### B4. Read abstracts — extract valuable keywords
+- Use \`read_result_sample\` with \`sampleSize\` up to 20 to get abstracts.
+  (\`run_search\` already returns abstracts if \`sampleSize\` was set.)
+- From relevant abstracts, identify:
+  - Synonyms and alternative terms for your concepts
+  - MeSH terms, subject headings, or domain-specific vocabulary
+  - Author keywords that could improve recall
+- These become candidates for query expansion in B5.
+
+### B5. Refine the search query
+- Based on evaluation from B3/B4, adjust the query:
+  - **Too many results**: Add more specific terms, use AND, narrow with field codes
+  - **Too few results**: Add synonyms with OR, use wildcards, broaden field scope
+  - **Off-topic results**: Add NOT exclusions, use more precise field tags
+  - **Missing key papers**: Add newly discovered keywords from abstracts
+- Example refinement:
+  Round 1: "deep learning" AND "medical imaging"
+  Round 2: ("deep learning" OR "convolutional neural network") AND
+           ("medical imaging" OR "radiology" OR "diagnostic imaging")
+  Round 3: ... AND NOT "survey" (if too many review papers)
+- Go back to B2 with the refined query.
+
+### B6. Apply filters (optional)
+- Use \`list_filters\` to see available facets (year, document type, language, etc.).
+- Use \`apply_filters\` to narrow results without changing the query.
 - Only available if the provider's \`capabilities.filters\` is true.
+- Common filter strategies:
+  - Year range: focus on recent publications
+  - Document type: Articles only (exclude conference abstracts)
+  - Language: English only
+- After filtering, re-evaluate with B3.
 
-### Step 10: export_results
+### B7. Decide: satisfied or iterate?
+- If the results are relevant and the count is manageable -> proceed to Phase C.
+- If not satisfied -> return to B5 and refine further.
+- Typical iteration: 2-4 rounds of refinement.
+
+---
+
+## Phase C: Export & Cleanup
+
+### C1. export_results
 - Input: \`sessionId\`, \`request: { scope: "all", includeAbstracts?: boolean, outputDir?: string }\`
 - Automates the provider's export UI to download results as RIS.
 - \`outputDir\` copies the exported file to a custom directory.
 - Some providers export natively as CSV/NBIB and auto-convert to RIS.
 - Large exports (Scopus bulk) may take up to 3 minutes — be patient.
 
-### Step 11: convert_export_to_ris (conditional)
+### C2. convert_export_to_ris (conditional)
 - Input: \`sessionId\`, \`filePath\`, \`format\` (optional)
 - Only needed if you have a previously downloaded file in non-RIS format.
 - Converts NBIB, CSV, or BibTeX to RIS.
 
-### Step 12: close_session
+### C3. close_session
 - Input: \`sessionId\`
 - Closes the browser and cleans up resources.
 - Always close sessions when done.
+
+---
+
+## Multi-Database Strategy
+
+For comprehensive literature reviews, search across multiple databases:
+1. Create sessions for 2-4 providers in parallel.
+2. Use the same refined query (adapted to each provider's syntax).
+3. Export RIS from each provider.
+4. Merge and deduplicate RIS files externally (e.g., in a reference manager).
 
 ## Utility Tools
 
@@ -114,14 +196,18 @@ Always check \`ok\` and \`nextActions\` in every response.
 1. Always call \`get_query_language_profile\` before constructing queries.
 2. Use \`run_search\` with the \`query\` parameter for a single-call search workflow.
 3. Check \`nextActions\` in every response — it tells you what to do next.
-4. If a tool returns a ManualInterventionRequiredError, the user must interact
+4. Iterate on the query 2-4 times. The first query is rarely the best one.
+5. Read abstracts of the top results to discover domain-specific keywords
+   and synonyms you might have missed.
+6. If a tool returns a ManualInterventionRequiredError, the user must interact
    with the headed browser. Use \`capture_session_artifacts\` to debug.
-5. PubMed does not require login. WOS, Scopus, and IEEE may require
+7. PubMed does not require login. WOS, Scopus, and IEEE may require
    institutional or personal access.
-6. Use \`persistentProfile: true\` when creating sessions for providers that
+8. Use \`persistentProfile: true\` when creating sessions for providers that
    require login — this saves cookies for reuse.
-7. The \`scope\` parameter for export only supports "all" — exporting selected
+9. The \`scope\` parameter for export only supports "all" — exporting selected
    results is not supported by design.
+10. For systematic reviews, search at least 2-3 databases and merge results.
 
 ## Anti-Patterns
 
@@ -131,19 +217,17 @@ Always check \`ok\` and \`nextActions\` in every response.
 - Do NOT call \`set_query\` then \`run_search\` with a query param (double-sets).
 - Do NOT ignore the \`phase\` field — it tells you the session's current state.
 - Do NOT call \`apply_filters\` on providers with \`capabilities.filters: false\`.
+- Do NOT export without first iterating on the query — refine until results are relevant.
 
 ## Session Phases
 
-\`\`\`
-created → starting → ready → awaiting_user_login → search_ready →
-searching → exporting → completed → closed
+created -> starting -> ready -> awaiting_user_login -> search_ready ->
+searching -> exporting -> completed -> closed
 (error can occur at any point)
-\`\`\`
 
 ## Response Envelope
 
 Every tool returns:
-\`\`\`json
 {
   "ok": true/false,
   "provider": "provider_id",
@@ -154,6 +238,5 @@ Every tool returns:
   "nextActions": ["next_tool_1", "next_tool_2"],
   "data": { ... }
 }
-\`\`\`
 Always check \`ok\` and follow \`nextActions\`.
 `;
