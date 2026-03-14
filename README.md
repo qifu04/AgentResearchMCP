@@ -39,6 +39,8 @@ npm run dev:http
 MCP_PORT=8080 npm run start:http
 ```
 
+也可以直接双击项目根目录下的 `start-http.bat`（Windows），它会自动杀掉占用 3100 端口的旧进程后启动服务。
+
 启动后可通过健康检查确认服务运行：
 
 ```bash
@@ -63,10 +65,10 @@ curl http://localhost:3100/health
 
 ```bash
 # 项目级
-claude mcp add agent-research --transport http --url http://localhost:3100/mcp --scope project
+claude mcp add agent-research --transport http http://localhost:3100/mcp --scope project
 
 # 用户级
-claude mcp add agent-research --transport http --url http://localhost:3100/mcp --scope user
+claude mcp add agent-research --transport http http://localhost:3100/mcp --scope user
 ```
 
 或手动编辑配置文件（项目级 `.claude/settings.json`，用户级 `~/.claude/settings.json`）：
