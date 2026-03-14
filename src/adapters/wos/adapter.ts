@@ -362,13 +362,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   async detectExportCapability(context: ProviderContext): Promise<ExportCapability> {
     const loginState = await this.detectLoginState(context);
     return {
-      nativeFormat: "ris",
-      convertibleToRis: true,
       requiresInteractiveLogin: !loginState.canExport,
-      supportsPage: true,
-      supportsAll: true,
-      supportsSelected: true,
-      supportsRange: true,
       maxBatch: 1000,
       blockingReason: loginState.canExport ? null : loginState.blockingReason,
       raw: { loginState, maxBatch: 1000 },
@@ -377,12 +371,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
 
   async exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
     await this.clearInterferingUi(context);
-    this.debugExport("start", { scope: request.scope, targetFormat: request.targetFormat });
-
-    if (request.scope === "selected" && request.selectedIndices?.length) {
-      await this.clearSelection(context);
-      await this.selectResultsByIndex(context, request.selectedIndices);
-    }
+    this.debugExport("start", { scope: request.scope });
 
     const exportButton = await this.findExportButton(context);
     await exportButton.click({ force: true });
@@ -406,16 +395,12 @@ export class WosAdapter extends BaseSearchProviderAdapter {
     const exportDialog = await this.findRisExportDialog(context);
     this.debugExport("dialog visible");
 
-    if (request.scope === "page") {
-      const pageRadio = exportDialog.getByRole("radio", { name: /All records on page/i }).first();
-      if (await pageRadio.isVisible().catch(() => false)) {
-        await pageRadio.click({ force: true });
-      }
-    } else if (request.scope === "range" || request.scope === "all") {
-      const start = request.start ?? 1;
-      const end = request.end ?? 1000;
-      await this.selectExportRange(exportDialog, start, end);
-    }
+    // Always export all results via the range mechanism (start=1, end=totalResults or maxBatch)
+    const summary = await this.readSearchSummary(context).catch(() => null);
+    const totalResults = summary?.totalResults ?? null;
+    const start = request.start ?? 1;
+    const end = request.end ?? (totalResults ? Math.min(totalResults, 1000) : 1000);
+    await this.selectExportRange(exportDialog, start, end);
 
     await this.selectExportContent(exportDialog, request.includeAbstracts !== false);
 
@@ -457,9 +442,8 @@ export class WosAdapter extends BaseSearchProviderAdapter {
         url: exportResponse.url(),
         status: exportResponse.status(),
         scope: request.scope,
-        start: request.start,
-        end: request.end,
-        selectedIndices: request.selectedIndices,
+        start,
+        end,
       },
     };
   }

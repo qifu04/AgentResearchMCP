@@ -1,4 +1,5 @@
 ﻿import path from "node:path";
+import { readFile } from "node:fs/promises";
 import type {
   ExportCapability,
   ExportRequest,
@@ -18,6 +19,8 @@ import {
 } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
 import { ieeeDescriptor } from "./descriptor.js";
+import { convertCsvToRis } from "../../core/ris-converter.js";
+import { writeTextFile } from "../../utils/fs.js";
 import { parseIeeeSearchSummary } from "./search-parsing.js";
 import { ieeeQueryProfile } from "./query-profile.js";
 import { ieeeSelectors } from "./selectors.js";
@@ -194,9 +197,9 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       await checkbox.waitFor({ state: "visible", timeout: 10_000 });
 
       if (!(await checkbox.isChecked().catch(() => false))) {
-        await checkbox.check({ force: true }).catch(async () => {
-          await checkbox.click({ force: true });
-        });
+        // Use evaluate to programmatically click, which reliably triggers Angular bindings
+        await checkbox.evaluate((el) => (el as HTMLInputElement).click());
+        await context.page.waitForTimeout(200);
       }
     }
   }
@@ -204,30 +207,22 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   override async clearSelection(context: ProviderContext): Promise<void> {
     const selectAll = context.page.locator(".results-actions-selectall-checkbox").first();
     if ((await selectAll.isVisible().catch(() => false)) && (await selectAll.isChecked().catch(() => false))) {
-      await selectAll.uncheck({ force: true }).catch(async () => {
-        await selectAll.click({ force: true });
-      });
+      await selectAll.evaluate((el) => (el as HTMLInputElement).click());
+      await context.page.waitForTimeout(200);
       return;
     }
 
     const checked = context.page.locator('xpl-results-item input[aria-label="Select search result"]:checked');
     const count = await checked.count();
     for (let i = 0; i < count; i += 1) {
-      await checked.nth(i).uncheck({ force: true }).catch(async () => {
-        await checked.nth(i).click({ force: true });
-      });
+      await checked.nth(i).evaluate((el) => (el as HTMLInputElement).click());
+      await context.page.waitForTimeout(100);
     }
   }
 
   async detectExportCapability(): Promise<ExportCapability> {
     return {
-      nativeFormat: "csv",
-      convertibleToRis: true,
       requiresInteractiveLogin: false,
-      supportsPage: true,
-      supportsAll: true,
-      supportsSelected: true,
-      supportsRange: false,
       maxBatch: null,
       blockingReason: null,
       raw: {
@@ -240,15 +235,6 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
 
   async exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
     await this.clearInterferingUi(context);
-
-    if (request.scope === "range") {
-      throw new Error("IEEE export does not support explicit record ranges from the result page.");
-    }
-
-    if (request.targetFormat === "ris") {
-      return this.exportRis(context, request);
-    }
-
     return this.exportCsv(context, request);
   }
 
@@ -272,16 +258,8 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   private async exportCsv(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
-    if (request.scope === "selected" && request.selectedIndices?.length) {
-      await this.clearSelection(context);
-      await this.selectResultsByIndex(context, request.selectedIndices);
-    } else if (request.scope === "page") {
-      await this.clearSelection(context);
-      await this.selectAllOnPage(context);
-    } else {
-      // IEEE Results -> Download exports all available CSV rows only when nothing is selected.
-      await this.clearSelection(context);
-    }
+    // IEEE exports all available CSV rows when nothing is selected.
+    await this.clearSelection(context);
 
     const dialog = await this.openExportDialog(context);
     const resultsTab = dialog.getByRole("tab", { name: /^Results$/i }).first();
@@ -298,94 +276,22 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     ]);
 
     const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `ieee-results-${Date.now()}.csv`);
-    await download.saveAs(targetPath);
+    const csvPath = path.join(context.downloadsDir, fileName || `ieee-results-${Date.now()}.csv`);
+    await download.saveAs(csvPath);
 
-    return {
-      provider: "ieee",
-      format: "csv",
-      path: targetPath,
-      fileName,
-      raw: { scope: request.scope, targetFormat: request.targetFormat, url: download.url() },
-    };
-  }
-
-  private async exportRis(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
-    if (request.scope === "selected" && request.selectedIndices?.length) {
-      await this.clearSelection(context);
-      await this.selectResultsByIndex(context, request.selectedIndices);
-    } else if (request.scope === "page") {
-      await this.clearSelection(context);
-      await this.selectAllOnPage(context);
-    }
-
-    const selectedCount = await context.page.locator('xpl-results-item input[aria-label="Select search result"]:checked').count();
-    if (selectedCount === 0) {
-      throw new Error("IEEE RIS export requires selected results. Use scope='selected' or scope='page'.");
-    }
-
-    const dialog = await this.openExportDialog(context);
-    const citationsTab = dialog.getByRole("tab", { name: /^Citations$/i }).first();
-    await citationsTab.waitFor({ state: "visible", timeout: 15_000 });
-    await citationsTab.click({ force: true });
-
-    const risOption = dialog.getByLabel(/RIS/i).first();
-    if (await risOption.isVisible().catch(() => false)) {
-      await risOption.check({ force: true }).catch(async () => {
-        await risOption.click({ force: true });
-      });
-    } else {
-      const risLabel = dialog.locator("label, button").filter({ hasText: /^RIS$/i }).first();
-      await risLabel.click({ force: true });
-    }
-
-    const includeLabel = request.includeAbstracts === false ? /Citation Only/i : /Citation and Abstract/i;
-    const includeOption = dialog.getByLabel(includeLabel).first();
-    if (await includeOption.isVisible().catch(() => false)) {
-      await includeOption.check({ force: true }).catch(async () => {
-        await includeOption.click({ force: true });
-      });
-    } else {
-      const includeButton = dialog.locator("label, button").filter({ hasText: includeLabel }).first();
-      await includeButton.click({ force: true }).catch(() => undefined);
-    }
-
-    const downloadButton = dialog.getByRole("button", { name: /^Download$/i }).first();
-    await downloadButton.waitFor({ state: "visible", timeout: 15_000 });
-
-    const [download] = await Promise.all([
-      context.page.waitForEvent("download", { timeout: 30_000 }),
-      downloadButton.click({ force: true }),
-    ]);
-
-    const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `ieee-citations-${Date.now()}.ris`);
-    await download.saveAs(targetPath);
+    // Convert CSV to RIS in-place
+    const csvContent = await readFile(csvPath, "utf8");
+    const risContent = convertCsvToRis(csvContent);
+    const risPath = csvPath.replace(/\.csv$/i, ".ris");
+    await writeTextFile(risPath, risContent);
 
     return {
       provider: "ieee",
       format: "ris",
-      path: targetPath,
-      fileName,
-      raw: {
-        scope: request.scope,
-        selectedCount,
-        includeAbstracts: request.includeAbstracts !== false,
-        url: download.url(),
-      },
+      path: risPath,
+      fileName: fileName?.replace(/\.csv$/i, ".ris"),
+      raw: { scope: request.scope, url: download.url() },
     };
-  }
-
-
-  private async selectAllOnPage(context: ProviderContext): Promise<void> {
-    const checkbox = context.page.locator(".results-actions-selectall-checkbox").first();
-    await checkbox.waitFor({ state: "visible", timeout: 10_000 });
-
-    if (!(await checkbox.isChecked().catch(() => false))) {
-      await checkbox.check({ force: true }).catch(async () => {
-        await checkbox.click({ force: true });
-      });
-    }
   }
 
   private async waitForAdvancedSearchReady(context: ProviderContext): Promise<void> {

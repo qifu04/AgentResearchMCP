@@ -364,16 +364,13 @@ export function registerTools(server: McpServer, service: SearchService, provide
   registerSessionTool(
     server,
     "export_results",
-    "Export provider results in native format and optionally convert to RIS.",
+    "Export all search results as RIS.",
     {
       sessionId: z.string(),
       request: z.object({
-        scope: z.enum(["page", "all", "selected", "range"]),
-        start: z.number().int().positive().optional(),
-        end: z.number().int().positive().optional(),
-        selectedIndices: z.array(z.number().int().positive()).optional(),
+        scope: z.literal("all").default("all"),
         includeAbstracts: z.boolean().optional(),
-        targetFormat: z.enum(["ris", "nbib", "csv", "bibtex", "unknown"]).optional(),
+        outputDir: z.string().min(1).optional().describe("Custom output directory to copy the exported file to."),
       }),
     },
     service,

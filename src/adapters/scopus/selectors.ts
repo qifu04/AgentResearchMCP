@@ -9,5 +9,8 @@ export const scopusSelectors: AdapterSelectors = {
     '.document-results-list-layout table tbody tr:has(input[type="checkbox"])',
   ],
   filterGroups: ['[role="combobox"][aria-controls]'],
-  exportButtons: ["button#export-login-modal", "button#export_results"],
+  exportButtons: [
+    ".export-dropdown button[aria-haspopup='menu']",
+    "button[data-testid='link-download']",
+  ],
 };

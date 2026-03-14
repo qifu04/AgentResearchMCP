@@ -27,11 +27,16 @@ export class LoginOrchestrator {
     while (Date.now() - startedAt < timeoutMs) {
       const session = await this.sessionManager.ensureRuntime(sessionId);
       const context = this.sessionManager.buildProviderContext(session);
-      await waitForDocumentReady(context.page);
-      const loginState = await adapter.detectLoginState(context);
-      if (isCapabilitySatisfied(loginState, capability)) {
-        await this.sessionManager.setPhase(sessionId, "search_ready");
-        return loginState;
+      try {
+        await waitForDocumentReady(context.page);
+        const loginState = await adapter.detectLoginState(context);
+        if (isCapabilitySatisfied(loginState, capability)) {
+          await this.sessionManager.setPhase(sessionId, "search_ready");
+          return loginState;
+        }
+      } catch {
+        // Page may be on an external login domain (e.g. Elsevier OAuth)
+        // where provider-specific selectors don't exist — skip and retry.
       }
       await sleep(pollMs);
     }

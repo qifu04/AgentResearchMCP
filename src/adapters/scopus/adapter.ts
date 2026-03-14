@@ -284,13 +284,7 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
   async detectExportCapability(context: ProviderContext): Promise<ExportCapability> {
     const loginState = await this.detectLoginState(context);
     return {
-      nativeFormat: "csv",
-      convertibleToRis: true,
       requiresInteractiveLogin: !loginState.canExport,
-      supportsPage: true,
-      supportsAll: true,
-      supportsSelected: true,
-      supportsRange: false,
       maxBatch: 2000,
       blockingReason: loginState.canExport ? null : loginState.blockingReason,
       raw: { loginState },
@@ -305,75 +299,68 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
 
     await this.clearInterferingUi(context);
 
-    if (request.scope === "range") {
-      throw new Error("Scopus export does not support explicit record ranges from the result page.");
-    }
+    // Scopus exports all results when nothing is selected
+    await this.clearSelection(context);
 
-    if (request.scope === "selected" && request.selectedIndices?.length) {
-      await this.clearSelection(context);
-      await this.selectResultsByIndex(context, request.selectedIndices);
-    } else if (request.scope === "page") {
-      await this.clearSelection(context);
-      await this.selectAllOnPage(context);
-    } else {
-      // scope === "all" — Scopus exports all results when nothing is selected
-      await this.clearSelection(context);
-    }
-
-    const dialog = await this.openExportDialog(context);
-
-    // Choose format: CSV is default, switch to RIS if requested
-    const formatLabel = request.targetFormat === "ris" ? /RIS/i : /CSV/i;
-    const formatOption = dialog.locator("label, button, [role='radio'], [role='option']").filter({ hasText: formatLabel }).first();
-    if (await formatOption.isVisible().catch(() => false)) {
-      await formatOption.click({ force: true });
-    }
-
-    // Click the export/download button inside the dialog
-    const downloadButton = dialog.getByRole("button", { name: /export|download/i }).first();
-    await downloadButton.waitFor({ state: "visible", timeout: 15_000 });
-
-    const format = request.targetFormat === "ris" ? "ris" : "csv";
-    const [download] = await Promise.all([
-      context.page.waitForEvent("download", { timeout: 30_000 }),
-      downloadButton.click({ force: true }),
-    ]);
-
-    const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `scopus-export-${Date.now()}.${format}`);
-    await download.saveAs(targetPath);
-
-    return {
-      provider: "scopus",
-      format,
-      path: targetPath,
-      fileName,
-      raw: { scope: request.scope, targetFormat: request.targetFormat, url: download.url() },
-    };
-  }
-
-  private async selectAllOnPage(context: ProviderContext): Promise<void> {
-    const checkbox = context.page.locator('#mainResults-selectAllTop, input[aria-label*="Select all"], input[aria-label*="全选"]').first();
-    await checkbox.waitFor({ state: "visible", timeout: 10_000 });
-
-    if (!(await checkbox.isChecked().catch(() => false))) {
-      await checkbox.check({ force: true }).catch(async () => {
-        await checkbox.click({ force: true });
-      });
-    }
-  }
-
-  private async openExportDialog(context: ProviderContext): Promise<import("playwright").Locator> {
+    // Step 1: Open the Export dropdown menu
     const exportButton = await this.findFirstVisible(context, this.selectors.exportButtons);
     await exportButton.scrollIntoViewIfNeeded().catch(() => undefined);
     await exportButton.click({ force: true });
 
-    // Wait for the export dialog/modal to appear
-    const dialog = context.page
-      .locator('[role="dialog"], .modal.show, #exportModals, .export-dialog')
-      .first();
-    await dialog.waitFor({ state: "visible", timeout: 15_000 });
-    return dialog;
+    // Step 2: Select RIS from the dropdown menu
+    const menu = context.page.locator('[role="menu"]').first();
+    await menu.waitFor({ state: "visible", timeout: 10_000 });
+    const risOption = menu.locator('[role="menuitem"], li, button, a').filter({ hasText: /RIS/i }).first();
+    await risOption.waitFor({ state: "visible", timeout: 5_000 });
+    await risOption.click({ force: true });
+
+    // Step 3: Wait for the export configuration page to load
+    const submitButton = context.page.locator('[data-testid="submit-export-button"]');
+    await submitButton.waitFor({ state: "visible", timeout: 15_000 });
+
+    // Step 4: Select "文献" range radio (export all, not just current page)
+    const rangeRadio = context.page.locator('#select-range');
+    if (await rangeRadio.count() > 0) {
+      await rangeRadio.evaluate((el) => (el as HTMLInputElement).click());
+      await context.page.waitForTimeout(300);
+
+      // Fill in the range: from 1 to max (up to 2000)
+      const fromInput = context.page.locator('[data-testid="input-range-from"]').last();
+      const toInput = context.page.locator('[data-testid="input-range-to"]').last();
+      await fromInput.fill("1");
+      await toInput.fill("2000");
+      await context.page.waitForTimeout(300);
+    }
+
+    // Step 5: Check all top-level info category checkboxes (引文信息, 题录信息, 摘要和关键字, etc.)
+    const categoryCheckboxes = context.page.locator('label[aria-controls] > input[type="checkbox"]');
+    const count = await categoryCheckboxes.count();
+    for (let i = 0; i < count; i++) {
+      const cb = categoryCheckboxes.nth(i);
+      if (!(await cb.isChecked().catch(() => false))) {
+        await cb.evaluate((el) => (el as HTMLInputElement).click());
+        await context.page.waitForTimeout(200);
+      }
+    }
+
+    // Step 6: Scopus uses async bulk export via API.
+    // Click submit, then wait for the automatic download (may take a while for large exports).
+    const [download] = await Promise.all([
+      context.page.waitForEvent("download", { timeout: 180_000 }),
+      submitButton.click({ force: true }),
+    ]);
+
+    const fileName = download.suggestedFilename();
+    const targetPath = path.join(context.downloadsDir, fileName || `scopus-export-${Date.now()}.ris`);
+    await download.saveAs(targetPath);
+
+    return {
+      provider: "scopus",
+      format: "ris",
+      path: targetPath,
+      fileName,
+      raw: { scope: request.scope, url: download.url() },
+    };
   }
 }
 

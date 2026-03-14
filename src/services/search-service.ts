@@ -169,30 +169,15 @@ export class SearchService {
     sessionId: string,
     request: { request: import("../adapters/provider-contract.js").ExportRequest },
   ): Promise<ExportResult> {
-    return this.withAdapter(sessionId, async (adapter, context) => {
-      const capability = await adapter.detectExportCapability(context);
-      const summary = await adapter.readSearchSummary(context).catch(() => null);
-      const result = await this.exportManager.exportWithAdapter(
+    return this.withAdapter(sessionId, async (adapter) => {
+      let result = await this.exportManager.exportWithAdapter(
         sessionId,
         adapter,
         request.request,
-        capability,
-        summary ?? undefined,
       );
 
-      if (
-        request.request.targetFormat === "ris" &&
-        result.path &&
-        result.format !== "ris" &&
-        capability.convertibleToRis
-      ) {
-        const convertedPath = await this.exportManager.convertExportToRis(result.path, result.format);
-        return {
-          ...result,
-          format: "ris",
-          path: convertedPath,
-          convertedToRis: true,
-        };
+      if (request.request.outputDir) {
+        result = await this.exportManager.copyToOutputDir(result, request.request.outputDir);
       }
 
       return result;

@@ -21,7 +21,7 @@ export type FilterType = "checkbox" | "radio" | "range" | "date-range" | "text" 
 
 export type NativeExportFormat = "ris" | "nbib" | "csv" | "bibtex" | "unknown";
 
-export type ExportScope = "page" | "all" | "selected" | "range";
+export type ExportScope = "all";
 
 export interface ProviderDescriptor {
   id: ProviderId;
@@ -133,13 +133,7 @@ export interface FilterApplyRequest {
 }
 
 export interface ExportCapability {
-  nativeFormat: NativeExportFormat;
-  convertibleToRis: boolean;
   requiresInteractiveLogin?: boolean;
-  supportsPage?: boolean;
-  supportsAll?: boolean;
-  supportsSelected?: boolean;
-  supportsRange?: boolean;
   maxBatch?: number | null;
   blockingReason?: string | null;
   raw?: unknown;
@@ -149,9 +143,8 @@ export interface ExportRequest {
   scope: ExportScope;
   start?: number;
   end?: number;
-  selectedIndices?: number[];
   includeAbstracts?: boolean;
-  targetFormat?: NativeExportFormat | "ris";
+  outputDir?: string;
   raw?: unknown;
 }
 

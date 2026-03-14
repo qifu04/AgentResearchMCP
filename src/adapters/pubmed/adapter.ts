@@ -1,4 +1,5 @@
 ﻿import path from "node:path";
+import { readFile } from "node:fs/promises";
 import type {
   ExportCapability,
   ExportRequest,
@@ -12,6 +13,8 @@ import type {
 } from "../provider-contract.js";
 import { runWithPageLoad } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
+import { convertNbibToRis } from "../../core/ris-converter.js";
+import { writeTextFile } from "../../utils/fs.js";
 import { cssEscape } from "../base/adapter-utils.js";
 import { pubmedDescriptor } from "./descriptor.js";
 import { pubmedQueryProfile } from "./query-profile.js";
@@ -253,16 +256,10 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
 
   async detectExportCapability(): Promise<ExportCapability> {
     return {
-      nativeFormat: "nbib",
-      convertibleToRis: true,
       requiresInteractiveLogin: false,
-      supportsPage: true,
-      supportsAll: true,
-      supportsSelected: true,
-      supportsRange: false,
       maxBatch: null,
       blockingReason: null,
-      raw: { scopes: ["page", "all", "selected"] },
+      raw: { format: "nbib" },
     };
   }
 
@@ -289,7 +286,7 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
 
     const scopeSelect = panel.locator("select#citation-manager-action-selection").first();
     if (await scopeSelect.isVisible().catch(() => false)) {
-      await scopeSelect.selectOption(scopeToPubMedSelectionValue(request.scope));
+      await scopeSelect.selectOption("all-results");
     }
 
     const createFileButton = panel.locator('button.action-panel-submit[type="submit"]').first();
@@ -310,14 +307,20 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
     ]);
 
     const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `pubmed-export-${Date.now()}.nbib`);
-    await download.saveAs(targetPath);
+    const nbibPath = path.join(context.downloadsDir, fileName || `pubmed-export-${Date.now()}.nbib`);
+    await download.saveAs(nbibPath);
+
+    // Convert NBIB to RIS in-place
+    const nbibContent = await readFile(nbibPath, "utf8");
+    const risContent = convertNbibToRis(nbibContent);
+    const risPath = nbibPath.replace(/\.nbib$/i, ".ris");
+    await writeTextFile(risPath, risContent);
 
     return {
       provider: "pubmed",
-      format: "nbib",
-      path: targetPath,
-      fileName,
+      format: "ris",
+      path: risPath,
+      fileName: fileName?.replace(/\.nbib$/i, ".ris"),
       raw: { scope: request.scope, url: download.url() },
     };
   }
@@ -365,18 +368,6 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
   }
 }
 
-function scopeToPubMedSelectionValue(scope: ExportRequest["scope"]): string {
-  switch (scope) {
-    case "page":
-      return "this-page";
-    case "all":
-      return "all-results";
-    case "selected":
-      return "custom-results-selection";
-    default:
-      return "custom-results-selection";
-  }
-}
 
 function escapeAttributeSelectorValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
