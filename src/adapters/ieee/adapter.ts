@@ -29,6 +29,7 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = ieeeDescriptor;
   readonly queryProfile = ieeeQueryProfile;
   readonly selectors = ieeeSelectors;
+  protected readonly startupProbeQuery = "10.1109/5.771073";
   readonly queryParamName = "queryText";
   readonly submitUrlPattern = /queryText=/;
 

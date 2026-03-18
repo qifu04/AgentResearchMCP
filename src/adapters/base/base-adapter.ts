@@ -13,30 +13,24 @@ import type {
   ResultItem,
   SearchProviderAdapter,
   SearchSummary,
+  StartupProbeResult,
 } from "../provider-contract.js";
 import {
   clickIfVisible,
   fillAndVerify,
-  normalizeWhitespace,
   readLocatorValue,
   runWithPageLoad,
 } from "../../browser/page-helpers.js";
+import { removePath } from "../../utils/fs.js";
 
-/**
- * Abstract base class for search provider adapters.
- * Provides default implementations for common patterns; subclasses override as needed.
- */
 export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter {
   abstract readonly descriptor: ProviderDescriptor;
   abstract readonly queryProfile: QueryLanguageProfile;
   abstract readonly selectors: AdapterSelectors;
+  protected abstract readonly startupProbeQuery: string;
 
-  /** URL search param that holds the query (e.g. "term", "queryText", "s"). null if not applicable. */
   abstract readonly queryParamName: string | null;
-  /** RegExp to wait for after submitting search (e.g. /term=/, /\/summary\//) */
   abstract readonly submitUrlPattern: RegExp;
-
-  // ── Abstract methods (must implement per provider) ──
 
   abstract detectLoginState(context: ProviderContext): Promise<LoginState>;
   abstract readSearchSummary(context: ProviderContext): Promise<SearchSummary>;
@@ -47,8 +41,6 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
   ): Promise<ResultItem[]>;
   abstract detectExportCapability(context: ProviderContext): Promise<ExportCapability>;
   abstract exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult>;
-
-  // ── Default implementations ──
 
   async openAdvancedSearch(context: ProviderContext): Promise<void> {
     await runWithPageLoad(context.page, async () => {
@@ -77,8 +69,11 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     if (this.queryParamName) {
       const url = new URL(context.page.url());
       const fromUrl = url.searchParams.get(this.queryParamName);
-      if (fromUrl) return fromUrl;
+      if (fromUrl) {
+        return fromUrl;
+      }
     }
+
     try {
       const input = await this.findQueryInput(context);
       return readLocatorValue(input);
@@ -154,10 +149,61 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
   }
 
   async clearSelection(_context: ProviderContext): Promise<void> {
-    // Default no-op — override if the provider supports selection clearing.
+    // Default no-op.
   }
 
-  // ── Protected utilities ──
+  async runStartupProbe(context: ProviderContext): Promise<StartupProbeResult> {
+    const query = this.resolveStartupProbeQuery();
+    await this.setCurrentQuery(context, query);
+    const summary = await this.submitSearch(context);
+    const totalResults = summary.totalResults ?? null;
+
+    if (totalResults !== null && totalResults < 1) {
+      throw new Error(
+        `${this.descriptor.displayName} startup probe query returned no results. ` +
+          `Override ${this.startupProbeEnvKey()} if a different smoke-test query is needed.`,
+      );
+    }
+
+    const exportCapability = await this.detectExportCapability(context);
+    if (exportCapability.requiresInteractiveLogin || exportCapability.blockingReason) {
+      throw new Error(
+        exportCapability.blockingReason ??
+          `${this.descriptor.displayName} startup probe is not export-ready yet.`,
+      );
+    }
+
+    const result = await this.exportNative(context, {
+      scope: "all",
+      start: 1,
+      end: 1,
+      includeAbstracts: false,
+      raw: {
+        startupProbe: true,
+      },
+    });
+
+    if (!result.path && (!result.chunks || result.chunks.length === 0)) {
+      throw new Error(`${this.descriptor.displayName} startup probe did not produce an export artifact.`);
+    }
+
+    if (result.path) {
+      await removePath(result.path);
+    }
+
+    return {
+      provider: this.descriptor.id,
+      query,
+      totalResults,
+      exportVerified: true,
+      format: result.format,
+      fileName: result.fileName ?? null,
+      raw: {
+        summary,
+        exportCapability,
+      },
+    };
+  }
 
   protected async findFirstVisible(context: ProviderContext, selectorList: string[]): Promise<Locator> {
     for (const selector of selectorList) {
@@ -175,5 +221,13 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
 
   protected async findSearchButton(context: ProviderContext): Promise<Locator> {
     return this.findFirstVisible(context, this.selectors.searchButtons);
+  }
+
+  protected resolveStartupProbeQuery(): string {
+    return process.env[this.startupProbeEnvKey()]?.trim() || this.startupProbeQuery;
+  }
+
+  private startupProbeEnvKey(): string {
+    return `STARTUP_PROBE_QUERY_${this.descriptor.id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
   }
 }

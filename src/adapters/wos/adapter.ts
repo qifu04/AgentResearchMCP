@@ -37,6 +37,7 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = wosDescriptor;
   readonly queryProfile = wosQueryProfile;
   readonly selectors = wosSelectors;
+  protected readonly startupProbeQuery = 'DO=("10.1038/nature14539")';
   readonly queryParamName = null;
   readonly submitUrlPattern = /\/summary\//;
 
@@ -850,7 +851,6 @@ function extractInstitution(bodyText: string): string | null {
   if (/Peking University/i.test(bodyText)) return "Peking University";
   return null;
 }
-
 
 
 

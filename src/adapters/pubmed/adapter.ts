@@ -25,6 +25,7 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = pubmedDescriptor;
   readonly queryProfile = pubmedQueryProfile;
   readonly selectors = pubmedSelectors;
+  protected readonly startupProbeQuery = "Bitencourt-Ferreira G[au] AND 2019[dp] AND docking[tiab]";
   readonly queryParamName = "term";
   readonly submitUrlPattern = /term=/;
 
@@ -372,8 +373,6 @@ export class PubMedAdapter extends BaseSearchProviderAdapter {
 function escapeAttributeSelectorValue(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
-
-
 
 
 

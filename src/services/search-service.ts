@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
   ExportCapability,
+  ExportRequest,
   ExportResult,
   FilterApplyRequest,
   FilterGroup,
@@ -11,15 +12,17 @@ import type {
   SearchObservation,
   SearchProviderAdapter,
   SearchSummary,
+  StartupProbeResult,
 } from "../adapters/provider-contract.js";
 import { waitForDocumentReady } from "../browser/page-helpers.js";
-import { bringWindowOnScreen, sendWindowOffScreen, notifyUser } from "../browser/window-position.js";
+import { bringWindowOnScreen, notifyUser, sendWindowOffScreen } from "../browser/window-position.js";
 import { ExportManager } from "../core/export-manager.js";
-import { LoginOrchestrator, type WaitForLoginOptions } from "../core/login-orchestrator.js";
 import { isManualInterventionRequiredError } from "../core/manual-intervention.js";
+import { LoginOrchestrator, type WaitForLoginOptions } from "../core/login-orchestrator.js";
 import { SessionLock } from "../core/session-lock.js";
 import { SessionManager } from "../core/session-manager.js";
 import type { SessionCreateOptions, SessionRecord } from "../types/session.js";
+import { ensureDir, removePath } from "../utils/fs.js";
 
 export interface AdapterResolver {
   get(providerId: ProviderId): SearchProviderAdapter;
@@ -54,7 +57,7 @@ export class SearchService {
   }
 
   async createSession(input: SessionCreateOptions): Promise<SessionRecord> {
-    const session = await this.sessionManager.createSession(input);
+    const session = await this.sessionManager.createSession(this.normalizeSessionCreateOptions(input));
     return session.record;
   }
 
@@ -88,11 +91,9 @@ export class SearchService {
   async waitForLogin(sessionId: string, options: WaitForLoginOptions): Promise<LoginState> {
     const session = await this.sessionManager.ensureRuntime(sessionId);
     const adapter = this.adapters.get(session.record.provider);
-    // User needs to interact ‚Äî bring browser on-screen and notify.
     await bringWindowOnScreen(session.runtime!.page);
-    notifyUser("ÈúÄË¶ÅÁôªÂΩï", `ËØ∑Âú®ÊµèËßàÂô®‰∏≠ÂÆåÊàê ${session.record.provider} ÁôªÂΩï`);
+    notifyUser("–Ë“™µ«¬º", `«Î‘⁄‰Ø¿¿∆˜÷–ÕÍ≥… ${session.record.provider} µ«¬º`);
     const result = await this.loginOrchestrator.waitForLoginTransition(sessionId, adapter, options);
-    // Login done ‚Äî move window back off-screen.
     await sendWindowOffScreen(session.runtime!.page);
     return result;
   }
@@ -167,19 +168,27 @@ export class SearchService {
 
   async exportResults(
     sessionId: string,
-    request: { request: import("../adapters/provider-contract.js").ExportRequest },
+    request: { request: ExportRequest },
   ): Promise<ExportResult> {
     return this.withAdapter(sessionId, async (adapter) => {
-      let result = await this.exportManager.exportWithAdapter(
-        sessionId,
-        adapter,
-        request.request,
-      );
+      let result = await this.exportManager.exportWithAdapter(sessionId, adapter, request.request);
 
       if (request.request.outputDir) {
         result = await this.exportManager.copyToOutputDir(result, request.request.outputDir);
       }
 
+      return result;
+    });
+  }
+
+  async runStartupProbe(sessionId: string): Promise<StartupProbeResult> {
+    return this.withAdapter(sessionId, async (adapter, context) => {
+      await this.sessionManager.setPhase(sessionId, "searching");
+      const result = await adapter.runStartupProbe(context);
+      const session = await this.sessionManager.requireSession(sessionId);
+      await removePath(session.paths.downloadsDir);
+      await ensureDir(session.paths.downloadsDir);
+      await this.sessionManager.setPhase(sessionId, "completed");
       return result;
     });
   }
@@ -248,6 +257,18 @@ export class SearchService {
     };
   }
 
+  private normalizeSessionCreateOptions(input: SessionCreateOptions): SessionCreateOptions {
+    if (input.persistentProfile !== undefined) {
+      return input;
+    }
+
+    const descriptor = this.adapters.get(input.provider).descriptor;
+    return {
+      ...input,
+      persistentProfile: descriptor.supportsManualLoginWait,
+    };
+  }
+
   private async withAdapter<T>(
     sessionId: string,
     task: (adapter: SearchProviderAdapter, context: ReturnType<SessionManager["buildProviderContext"]>) => Promise<T>,
@@ -261,7 +282,6 @@ export class SearchService {
         await waitForDocumentReady(context.page);
         const result = await task(adapter, context);
         await waitForDocumentReady(context.page);
-        // If we just recovered from manual intervention, move window back off-screen.
         if (wasAwaitingIntervention) {
           await sendWindowOffScreen(context.page);
         }
@@ -269,7 +289,7 @@ export class SearchService {
       } catch (error) {
         if (isManualInterventionRequiredError(error)) {
           await bringWindowOnScreen(context.page);
-          notifyUser("ÈúÄË¶Å‰∫∫Â∑•Êìç‰Ωú", error.message);
+          notifyUser("–Ë“™»Àπ§≤Ÿ◊˜", error.message);
           await this.sessionManager.setPhase(sessionId, "awaiting_manual_intervention", error.message);
           throw error;
         }

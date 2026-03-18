@@ -11,6 +11,7 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server/index.ts",
     "dev:http": "tsx src/server/http-server.ts",
+    "prestart:http": "npm run build",
     "start:http": "node dist/src/server/http-server.js",
     "test": "vitest run",
     "test:watch": "vitest",

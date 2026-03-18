@@ -26,12 +26,15 @@ Always check \`ok\` and \`nextActions\` in every response.
 ## Workflow Overview
 
 The complete literature search workflow has two layers:
-1. **Session Setup** (one-time): create session -> login -> get query syntax
+1. **Session Setup** (one-time): create session -> open advanced search -> get query syntax
 2. **Iterative Search Loop** (repeat): build query -> search -> evaluate -> refine -> export
 
 Phase A: Session Setup
   list_providers -> create_session -> open_advanced_search ->
-  get_login_state -> (wait_for_login) -> get_query_language_profile
+  get_query_language_profile -> run_search
+
+Repair path (only when auth is unexpectedly broken)
+  get_login_state -> (wait_for_login) -> open_advanced_search -> get_query_language_profile
         |
         v
 Phase B: Iterative Search & Refinement (repeat until satisfied)
@@ -57,8 +60,9 @@ Phase C: Export & Cleanup
 
 ### A2. create_session
 - Input: \`provider\` (required), \`persistentProfile\` (optional, boolean)
-- Returns: \`sessionId\` — use this in all subsequent calls.
-- Set \`persistentProfile: true\` to reuse login cookies across sessions.
+- Returns: \`sessionId\` - use this in all subsequent calls.
+- For login-gated providers, omitting \`persistentProfile\` now defaults to the preflight-verified persistent profile.
+- Set \`persistentProfile: false\` only when you explicitly want a disposable anonymous session.
 - A headed browser window opens automatically.
 
 ### A3. open_advanced_search
@@ -70,12 +74,13 @@ Phase C: Export & Cleanup
 ### A4. get_login_state
 - Input: \`sessionId\`
 - Returns: \`LoginState\` with \`kind\`, \`canSearch\`, \`canExport\`, \`institutionAccess\`.
-- If \`canSearch: true\` -> proceed to A6.
-- If \`canSearch: false\` -> proceed to A5 (wait_for_login).
+- In the normal startup-gated flow this should already be ready.
+- Use it mainly as a diagnostic check when an existing profile appears to have expired.
 
-### A5. wait_for_login (conditional)
+### A5. wait_for_login (repair path only)
 - Input: \`sessionId\`, \`capability\` ("search" | "export" | "personal"), \`timeoutMs\`, \`pollMs\`
-- Only needed when get_login_state shows \`canSearch: false\`.
+- This is no longer part of the normal agent loop because startup preflight blocks server readiness until login and export are verified.
+- Use it only if an already-running profile loses auth and \`get_login_state\` shows access has expired.
 - Brings the browser window to the foreground for the user to log in manually.
 - Polls until the user completes login and returns to the search page.
 - Default timeout: 5 minutes. Increase for slow institutional SSO flows.

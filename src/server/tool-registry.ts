@@ -31,7 +31,7 @@ export function registerTools(server: McpServer, service: SearchService, provide
             provider: record.provider,
             sessionId: record.id,
             phase: record.phase,
-            nextActions: ["open_advanced_search", "get_login_state"],
+            nextActions: ["open_advanced_search"],
           }),
         );
       } catch (error) {
@@ -100,7 +100,7 @@ export function registerTools(server: McpServer, service: SearchService, provide
         provider: record.provider,
         sessionId: record.id,
         phase: record.phase,
-        nextActions: ["get_login_state", "get_query_language_profile"],
+        nextActions: ["get_query_language_profile", "run_search"],
       });
     },
   );
@@ -118,7 +118,7 @@ export function registerTools(server: McpServer, service: SearchService, provide
         provider: record.provider,
         sessionId,
         phase: record.phase,
-        nextActions: loginState.canSearch ? ["set_query", "run_search"] : ["wait_for_login"],
+        nextActions: loginState.canSearch ? ["get_query_language_profile", "run_search"] : ["wait_for_login"],
       });
     },
   );

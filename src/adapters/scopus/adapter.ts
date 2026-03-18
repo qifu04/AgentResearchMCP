@@ -20,6 +20,7 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = scopusDescriptor;
   readonly queryProfile = scopusQueryProfile;
   readonly selectors = scopusSelectors;
+  protected readonly startupProbeQuery = 'DOI("10.1016/j.cell.2011.02.013")';
   readonly queryParamName = "s";
   readonly submitUrlPattern = /results\.uri|[?&]s=/;
 
@@ -299,6 +300,10 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       throw new Error(loginState.blockingReason ?? "Scopus export requires a personal logged-in account.");
     }
 
+    const summary = await this.readSearchSummary(context).catch(() => null);
+    const start = Math.max(1, request.start ?? 1);
+    const end = Math.max(start, Math.min(summary?.totalResults ?? 2000, request.end ?? 2000));
+
     await this.clearInterferingUi(context);
 
     // Scopus exports all results when nothing is selected
@@ -326,11 +331,11 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       await rangeRadio.evaluate((el) => (el as HTMLInputElement).click());
       await context.page.waitForTimeout(300);
 
-      // Fill in the range: from 1 to max (up to 2000)
+      // Fill in the requested range, capped by the visible result count.
       const fromInput = context.page.locator('[data-testid="input-range-from"]').last();
       const toInput = context.page.locator('[data-testid="input-range-to"]').last();
-      await fromInput.fill("1");
-      await toInput.fill("2000");
+      await fromInput.fill(String(start));
+      await toInput.fill(String(end));
       await context.page.waitForTimeout(300);
     }
 
@@ -361,12 +366,10 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       format: "ris",
       path: targetPath,
       fileName,
-      raw: { scope: request.scope, url: download.url() },
+      raw: { scope: request.scope, start, end, url: download.url() },
     };
   }
 }
-
-
 
 
 

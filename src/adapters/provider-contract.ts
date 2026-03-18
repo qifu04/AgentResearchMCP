@@ -158,6 +158,16 @@ export interface ExportResult {
   raw?: unknown;
 }
 
+export interface StartupProbeResult {
+  provider: ProviderId;
+  query: string;
+  totalResults?: number | null;
+  exportVerified: boolean;
+  format?: NativeExportFormat | "ris" | null;
+  fileName?: string | null;
+  raw?: unknown;
+}
+
 export interface SearchObservation {
   loginState: LoginState;
   queryProfile: QueryLanguageProfile;
@@ -198,4 +208,5 @@ export interface SearchProviderAdapter {
   clearSelection(context: ProviderContext): Promise<void>;
   detectExportCapability(context: ProviderContext): Promise<ExportCapability>;
   exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult>;
+  runStartupProbe(context: ProviderContext): Promise<StartupProbeResult>;
 }

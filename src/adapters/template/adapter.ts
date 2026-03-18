@@ -59,6 +59,7 @@ export class TemplateAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = templateDescriptor;
   readonly queryProfile = templateQueryProfile;
   readonly selectors = templateSelectors;
+  protected readonly startupProbeQuery = "TODO";
 
   /**
    * URL search parameter that holds the query string on the results page.
