@@ -320,6 +320,7 @@ MCP Client (Claude Code / Cursor / Codex ...)
 │  browser/*    Playwright 工厂 · 页面助手     │
 │  core/*       会话管理 · 导出 · 登录 · 锁    │
 └─────────────────────────────────────────────┘
+```
 
 ### 目录结构
 
