@@ -4,7 +4,7 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { isInitializeRequest } from "@modelcontextprotocol/sdk/types.js";
-import { registerTools } from "./tool-registry.js";
+import { createConfiguredMcpServer } from "./mcp-server.js";
 import { initializeServerRuntime } from "./runtime.js";
 
 const PORT = Number(process.env.MCP_PORT ?? 3100);
@@ -14,12 +14,7 @@ async function main(): Promise<void> {
   const transports = new Map<string, StreamableHTTPServerTransport | SSEServerTransport>();
 
   function createMcpServer(): McpServer {
-    const server = new McpServer({
-      name: "agent-research-mcp",
-      version: "0.1.0",
-    });
-    registerTools(server, service, providers);
-    return server;
+    return createConfiguredMcpServer(service, providers);
   }
 
   const httpServer = createServer(async (req, res) => {

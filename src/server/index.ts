@@ -1,17 +1,10 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerTools } from "./tool-registry.js";
+import { createConfiguredMcpServer } from "./mcp-server.js";
 import { initializeServerRuntime } from "./runtime.js";
 
 async function main(): Promise<void> {
   const { providers, service } = await initializeServerRuntime(process.cwd());
-
-  const server = new McpServer({
-    name: "agent-research-mcp",
-    version: "0.1.0",
-  });
-
-  registerTools(server, service, providers);
+  const server = createConfiguredMcpServer(service, providers);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
