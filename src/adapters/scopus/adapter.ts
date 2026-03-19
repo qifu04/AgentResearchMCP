@@ -11,10 +11,56 @@ import type {
 } from "../provider-contract.js";
 import { clickIfVisible } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
+import { writeTextFile } from "../../utils/fs.js";
+import { sleep } from "../../utils/time.js";
 import { scopusDescriptor } from "./descriptor.js";
+import {
+  deriveScopusExportFileName,
+  findScopusBulkJob,
+  parseScopusBulkExportId,
+  parseScopusPresignedUrl,
+  type ScopusBulkJob,
+} from "./export-job.js";
 import { scopusQueryProfile } from "./query-profile.js";
 import { parseScopusSearchSummary } from "./search-parsing.js";
 import { scopusSelectors } from "./selectors.js";
+
+const SCOPUS_EXPORT_INITIATE_PATH = "/gateway/export-service-reactive/export/bulk-job/initiate";
+const SCOPUS_EXPORT_JOBS_PATH = "/gateway/export-service-reactive/export/bulk-jobs";
+const SCOPUS_EXPORT_POLL_MS = 2_000;
+const SCOPUS_EXPORT_READY_TIMEOUT_MS = 90_000;
+const SCOPUS_EXPORT_DOWNLOAD_TIMEOUT_MS = 30_000;
+const SCOPUS_EXPORT_FIELD_GROUPS = [
+  "authors",
+  "titles",
+  "year",
+  "eid",
+  "sourceTitle",
+  "volumeIssuePages",
+  "citedBy",
+  "source",
+  "documentType",
+  "publicationStage",
+  "doi",
+  "openAccess",
+  "affiliations",
+  "serialIdentifiers",
+  "pubMedId",
+  "publisher",
+  "editors",
+  "originalLanguage",
+  "correspondenceAddress",
+  "abbreviatedSourceTitle",
+  "abstract",
+  "authorKeywords",
+  "indexedKeywords",
+  "fundingDetails",
+  "fundingTexts",
+  "tradenamesAndManufacturers",
+  "accessionNumbersAndChemicals",
+  "conferenceInformation",
+  "references",
+] as const;
 
 export class ScopusAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = scopusDescriptor;
@@ -303,74 +349,171 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
     const summary = await this.readSearchSummary(context).catch(() => null);
     const start = Math.max(1, request.start ?? 1);
     const end = Math.max(start, Math.min(summary?.totalResults ?? 2000, request.end ?? 2000));
+    const query = summary?.query?.trim();
+    if (!query) {
+      throw new Error("Scopus export requires a resolved query before starting the bulk export.");
+    }
 
     await this.clearInterferingUi(context);
-
-    // Scopus exports all results when nothing is selected
-    await this.clearSelection(context);
-
-    // Step 1: Open the Export dropdown menu
-    const exportButton = await this.findFirstVisible(context, this.selectors.exportButtons);
-    await exportButton.scrollIntoViewIfNeeded().catch(() => undefined);
-    await exportButton.click({ force: true });
-
-    // Step 2: Select RIS from the dropdown menu
-    const menu = context.page.locator('[role="menu"]').first();
-    await menu.waitFor({ state: "visible", timeout: 10_000 });
-    const risOption = menu.locator('[role="menuitem"], li, button, a').filter({ hasText: /RIS/i }).first();
-    await risOption.waitFor({ state: "visible", timeout: 5_000 });
-    await risOption.click({ force: true });
-
-    // Step 3: Wait for the export configuration page to load
-    const submitButton = context.page.locator('[data-testid="submit-export-button"]');
-    await submitButton.waitFor({ state: "visible", timeout: 15_000 });
-
-    // Step 4: Select "文献" range radio (export all, not just current page)
-    const rangeRadio = context.page.locator('#select-range');
-    if (await rangeRadio.count() > 0) {
-      await rangeRadio.evaluate((el) => (el as HTMLInputElement).click());
-      await context.page.waitForTimeout(300);
-
-      // Fill in the requested range, capped by the visible result count.
-      const fromInput = context.page.locator('[data-testid="input-range-from"]').last();
-      const toInput = context.page.locator('[data-testid="input-range-to"]').last();
-      await fromInput.fill(String(start));
-      await toInput.fill(String(end));
-      await context.page.waitForTimeout(300);
+    const locale = await context.page.evaluate(() => document.documentElement.lang || navigator.language || "en-US");
+    const bulkExportId = await this.initiateBulkExport(context, {
+      query,
+      start,
+      end,
+      locale,
+    });
+    const bulkJob = await this.waitForBulkExportJob(context, bulkExportId);
+    const presignedUrl = await this.generateBulkExportUrl(context, bulkExportId);
+    const response = await context.page.context().request.get(presignedUrl, {
+      failOnStatusCode: false,
+      timeout: SCOPUS_EXPORT_DOWNLOAD_TIMEOUT_MS,
+    });
+    if (!response.ok()) {
+      throw new Error(`Scopus export download failed with status ${response.status()}.`);
     }
 
-    // Step 5: Check all top-level info category checkboxes (引文信息, 题录信息, 摘要和关键字, etc.)
-    const categoryCheckboxes = context.page.locator('label[aria-controls] > input[type="checkbox"]');
-    const count = await categoryCheckboxes.count();
-    for (let i = 0; i < count; i++) {
-      const cb = categoryCheckboxes.nth(i);
-      if (!(await cb.isChecked().catch(() => false))) {
-        await cb.evaluate((el) => (el as HTMLInputElement).click());
-        await context.page.waitForTimeout(200);
-      }
-    }
-
-    // Step 6: Scopus uses async bulk export via API.
-    // Click submit, then wait for the automatic download (may take a while for large exports).
-    const [download] = await Promise.all([
-      context.page.waitForEvent("download", { timeout: 180_000 }),
-      submitButton.click({ force: true }),
-    ]);
-
-    const fileName = download.suggestedFilename();
-    const targetPath = path.join(context.downloadsDir, fileName || `scopus-export-${Date.now()}.ris`);
-    await download.saveAs(targetPath);
+    const fileName = deriveScopusExportFileName(presignedUrl, bulkJob.fileUrl ?? null);
+    const targetPath = path.join(context.downloadsDir, fileName);
+    await writeTextFile(targetPath, await response.text());
 
     return {
       provider: "scopus",
       format: "ris",
       path: targetPath,
       fileName,
-      raw: { scope: request.scope, start, end, url: download.url() },
+      raw: {
+        scope: request.scope,
+        start,
+        end,
+        bulkExportId,
+        status: bulkJob.status,
+        fileUrl: bulkJob.fileUrl ?? null,
+        url: presignedUrl,
+      },
     };
+  }
+
+  private async initiateBulkExport(
+    context: ProviderContext,
+    input: { query: string; start: number; end: number; locale: string },
+  ): Promise<string> {
+    const initiateResponse = await this.fetchScopusApiText(context, SCOPUS_EXPORT_INITIATE_PATH, {
+      method: "POST",
+      body: JSON.stringify({
+        searchRequest: {
+          query: input.query,
+          documentClassification: "PRIMARY",
+          resultSet: {
+            offset: input.start - 1,
+            itemCount: input.end - input.start + 1,
+          },
+        },
+        fileType: "RIS",
+        exportType: "PUBLICATION",
+        fieldGroupIdentifiers: SCOPUS_EXPORT_FIELD_GROUPS,
+        locale: input.locale,
+        userQuery: input.query,
+      }),
+    });
+    if (!initiateResponse.ok) {
+      throw new Error(`Scopus bulk export initiation failed with status ${initiateResponse.status}.`);
+    }
+
+    const bulkExportId = parseScopusBulkExportId(initiateResponse.text);
+    if (!bulkExportId) {
+      throw new Error("Scopus bulk export initiation did not return a bulkExportId.");
+    }
+
+    return bulkExportId;
+  }
+
+  private async waitForBulkExportJob(context: ProviderContext, bulkExportId: string): Promise<ScopusBulkJob> {
+    const startedAt = Date.now();
+
+    while (Date.now() - startedAt < SCOPUS_EXPORT_READY_TIMEOUT_MS) {
+      const response = await this.fetchScopusApiText(context, SCOPUS_EXPORT_JOBS_PATH, {
+        method: "GET",
+      });
+      if (!response.ok) {
+        if (isTransientScopusExportStatus(response.status)) {
+          await sleep(SCOPUS_EXPORT_POLL_MS);
+          continue;
+        }
+        throw new Error(`Scopus bulk export polling failed with status ${response.status}.`);
+      }
+
+      const job = findScopusBulkJob(response.text, bulkExportId);
+      if (job?.status === "COMPLETED") {
+        return job;
+      }
+      if (job?.status === "FAILED") {
+        throw new Error(`Scopus bulk export job ${bulkExportId} failed.`);
+      }
+
+      await sleep(SCOPUS_EXPORT_POLL_MS);
+    }
+
+    throw new Error(`Timed out waiting for Scopus bulk export job ${bulkExportId} to complete.`);
+  }
+
+  private async generateBulkExportUrl(context: ProviderContext, bulkExportId: string): Promise<string> {
+    const generateUrl = new URL(
+      `/gateway/export-service-reactive/export/bulk-job/${bulkExportId}/generate-url`,
+      context.page.url(),
+    ).pathname;
+    for (let attempt = 1; attempt <= 5; attempt += 1) {
+      const response = await this.fetchScopusApiText(context, generateUrl, {
+        method: "POST",
+      });
+      if (!response.ok) {
+        if (isTransientScopusExportStatus(response.status) && attempt < 5) {
+          await sleep(SCOPUS_EXPORT_POLL_MS);
+          continue;
+        }
+        throw new Error(`Scopus bulk export URL generation failed with status ${response.status}.`);
+      }
+
+      const presignedUrl = parseScopusPresignedUrl(response.text);
+      if (!presignedUrl) {
+        throw new Error(`Scopus bulk export job ${bulkExportId} did not return a presigned URL.`);
+      }
+
+      return presignedUrl;
+    }
+
+    throw new Error(`Scopus bulk export job ${bulkExportId} did not return a presigned URL.`);
+  }
+
+  private async fetchScopusApiText(
+    context: ProviderContext,
+    pathName: string,
+    init: { method: "GET" | "POST"; body?: string },
+  ): Promise<{ ok: boolean; status: number; text: string }> {
+    return context.page.evaluate(
+      async ({ pathName: requestPath, method, body }) => {
+        const response = await fetch(requestPath, {
+          method,
+          credentials: "include",
+          headers: body ? { "content-type": "application/json" } : undefined,
+          body,
+        });
+        return {
+          ok: response.ok,
+          status: response.status,
+          text: await response.text(),
+        };
+      },
+      {
+        pathName,
+        method: init.method,
+        body: init.body ?? null,
+      },
+    );
   }
 }
 
-
+function isTransientScopusExportStatus(status: number): boolean {
+  return status === 429 || status === 502 || status === 503 || status === 504;
+}
 
 

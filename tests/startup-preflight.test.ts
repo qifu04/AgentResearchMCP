@@ -232,6 +232,201 @@ describe("StartupPreflightCoordinator", () => {
       totalResults: 3,
     });
   });
+
+  it("runs provider preflights in parallel and preserves descriptor order in results", async () => {
+    const calls: string[] = [];
+    let releaseSlowProbe!: () => void;
+    const slowProbeGate = new Promise<void>((resolve) => {
+      releaseSlowProbe = () => resolve();
+    });
+
+    const service = {
+      createSession: vi.fn(async ({ provider }: { provider: string }) => {
+        calls.push(`create:${provider}`);
+        return createSessionRecord(`session-${provider}`, provider);
+      }),
+      openAdvancedSearch: vi.fn(async (sessionId: string) => {
+        calls.push(`open:${sessionId}`);
+        const provider = sessionId.replace("session-", "");
+        return createSessionRecord(sessionId, provider);
+      }),
+      getLoginState: vi.fn(async (sessionId: string) => {
+        calls.push(`login:${sessionId}`);
+        return {
+          kind: "institutional",
+          authenticated: true,
+          canSearch: true,
+          canExport: true,
+          detectedBy: ["test"],
+        };
+      }),
+      waitForLogin: vi.fn(),
+      runStartupProbe: vi.fn(async (sessionId: string) => {
+        calls.push(`probe:start:${sessionId}`);
+        if (sessionId === "session-wos") {
+          await slowProbeGate;
+        }
+        calls.push(`probe:end:${sessionId}`);
+        return {
+          provider: sessionId.replace("session-", ""),
+          query: "probe",
+          totalResults: sessionId === "session-wos" ? 1 : 2,
+          exportVerified: true,
+          format: "ris",
+        };
+      }),
+      closeSession: vi.fn(async (sessionId: string) => {
+        calls.push(`close:${sessionId}`);
+        const provider = sessionId.replace("session-", "");
+        return createSessionRecord(sessionId, provider);
+      }),
+      sessionManager: {
+        getSession: vi.fn(async () => null),
+      },
+    } as unknown as SearchService;
+
+    const coordinator = new StartupPreflightCoordinator(service, {
+      listDescriptors: () => [
+        {
+          id: "wos",
+          displayName: "Web of Science",
+          entryUrl: "https://example.com",
+          supportsManualLoginWait: true,
+          capabilities: {
+            rawQuery: true,
+            builderUi: true,
+            filters: true,
+            inlineAbstracts: true,
+            selection: true,
+            export: true,
+          },
+        },
+        {
+          id: "ieee",
+          displayName: "IEEE Xplore",
+          entryUrl: "https://example.com",
+          supportsManualLoginWait: true,
+          capabilities: {
+            rawQuery: true,
+            builderUi: true,
+            filters: true,
+            inlineAbstracts: true,
+            selection: true,
+            export: true,
+          },
+        },
+      ],
+    });
+
+    const runPromise = coordinator.run();
+    await vi.waitFor(() => {
+      expect(calls).toContain("probe:start:session-ieee");
+    });
+
+    expect(calls).toContain("probe:start:session-wos");
+    expect(calls).not.toContain("probe:end:session-wos");
+
+    releaseSlowProbe();
+    const result = await runPromise;
+
+    expect(result.map((entry) => entry.provider)).toEqual(["wos", "ieee"]);
+    expect(result).toEqual([
+      expect.objectContaining({
+        provider: "wos",
+        exportVerified: true,
+        totalResults: 1,
+      }),
+      expect.objectContaining({
+        provider: "ieee",
+        exportVerified: true,
+        totalResults: 2,
+      }),
+    ]);
+  });
+
+  it("waits for all parallel providers to settle before surfacing combined failures", async () => {
+    const closeSession = vi.fn(async (sessionId: string) => createSessionRecord(sessionId, sessionId.replace("session-", "")));
+    let releaseSlowProbe!: () => void;
+    const slowProbeGate = new Promise<void>((resolve) => {
+      releaseSlowProbe = () => resolve();
+    });
+
+    const service = {
+      createSession: vi.fn(async ({ provider }: { provider: string }) => createSessionRecord(`session-${provider}`, provider)),
+      openAdvancedSearch: vi.fn(async (sessionId: string) => createSessionRecord(sessionId, sessionId.replace("session-", ""))),
+      getLoginState: vi.fn(async () => ({
+        kind: "institutional",
+        authenticated: true,
+        canSearch: true,
+        canExport: true,
+        detectedBy: ["test"],
+      })),
+      waitForLogin: vi.fn(),
+      runStartupProbe: vi.fn(async (sessionId: string) => {
+        if (sessionId === "session-wos") {
+          await slowProbeGate;
+          return {
+            provider: "wos",
+            query: "probe",
+            totalResults: 1,
+            exportVerified: true,
+            format: "ris",
+          };
+        }
+        throw new Error("probe failed");
+      }),
+      closeSession,
+      sessionManager: {
+        getSession: vi.fn(async () => null),
+      },
+    } as unknown as SearchService;
+
+    const coordinator = new StartupPreflightCoordinator(service, {
+      listDescriptors: () => [
+        {
+          id: "wos",
+          displayName: "Web of Science",
+          entryUrl: "https://example.com",
+          supportsManualLoginWait: true,
+          capabilities: {
+            rawQuery: true,
+            builderUi: true,
+            filters: true,
+            inlineAbstracts: true,
+            selection: true,
+            export: true,
+          },
+        },
+        {
+          id: "scopus",
+          displayName: "Scopus",
+          entryUrl: "https://example.com",
+          supportsManualLoginWait: true,
+          capabilities: {
+            rawQuery: true,
+            builderUi: true,
+            filters: false,
+            inlineAbstracts: true,
+            selection: true,
+            export: true,
+          },
+        },
+      ],
+    });
+
+    const runPromise = coordinator.run();
+    await vi.waitFor(() => {
+      expect(service.runStartupProbe).toHaveBeenCalledWith("session-scopus", { verifyExport: true });
+    });
+    expect(closeSession).toHaveBeenCalledTimes(1);
+
+    releaseSlowProbe();
+
+    await expect(runPromise).rejects.toThrow(/Scopus/i);
+    expect(closeSession).toHaveBeenCalledTimes(2);
+    expect(closeSession).toHaveBeenCalledWith("session-wos");
+    expect(closeSession).toHaveBeenCalledWith("session-scopus");
+  });
 });
 
 describe("resolveStartupPreflightOptions", () => {

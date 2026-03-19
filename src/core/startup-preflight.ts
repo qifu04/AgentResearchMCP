@@ -97,7 +97,6 @@ export class StartupPreflightCoordinator {
   async run(): Promise<StartupPreflightResult[]> {
     const descriptors = this.selectDescriptors();
     const startedAt = performance.now();
-    const results: StartupPreflightResult[] = [];
 
     logger.info("Startup preflight plan", {
       providers: descriptors.map((descriptor) => descriptor.id),
@@ -105,11 +104,47 @@ export class StartupPreflightCoordinator {
       trace: this.options.trace,
       collectBrowserMetrics: this.options.collectBrowserMetrics,
       maxAttempts: this.options.maxAttempts,
+      parallel: descriptors.length > 1,
     });
 
-    for (const descriptor of descriptors) {
-      results.push(await this.runForProvider(descriptor));
+    const settled = await Promise.allSettled(
+      descriptors.map(async (descriptor) => ({
+        descriptor,
+        result: await this.runForProvider(descriptor),
+      })),
+    );
+
+    const failures = settled
+      .map((entry, index) => ({ entry, descriptor: descriptors[index] }))
+      .filter(
+        (
+          value,
+        ): value is {
+          entry: PromiseRejectedResult;
+          descriptor: ProviderDescriptor;
+        } => value.entry.status === "rejected",
+      );
+
+    if (failures.length > 0) {
+      throw new Error(
+        failures
+          .map(({ descriptor, entry }) => {
+            const reason = entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
+            if (reason.toLowerCase().includes(descriptor.displayName.toLowerCase())) {
+              return reason;
+            }
+            return `Startup preflight failed for ${descriptor.displayName}: ${reason}`;
+          })
+          .join("; "),
+      );
     }
+
+    const results = settled.map((entry) => {
+      if (entry.status !== "fulfilled") {
+        throw new Error("Startup preflight settled without a result.");
+      }
+      return entry.value.result;
+    });
 
     logger.info("Startup preflight completed", {
       elapsedMs: roundElapsedMs(startedAt),
