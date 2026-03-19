@@ -7,7 +7,6 @@ export const wosSelectors: AdapterSelectors = {
     'textarea[placeholder*="Enter or edit your query here"]',
     'textarea[aria-label*="Query Preview"]',
     'textarea[placeholder*="Query Preview"]',
-    "textarea",
   ],
   searchButtons: [
     ".search-preview-left-holder .button-row.adv button.search",

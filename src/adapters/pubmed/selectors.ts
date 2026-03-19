@@ -2,15 +2,12 @@
 
 export const pubmedSelectors: AdapterSelectors = {
   queryInputs: [
-    'textarea[aria-label*="Query"]',
-    'input[name="term"]',
-    'textarea[name="term"]',
-    'input[type="search"]',
-    'textarea',
+    'textarea#query-box-input[name="term"]',
+    "textarea#query-box-input",
   ],
   searchButtons: [
-    'button:has-text("Search")',
-    'button[type="submit"]',
+    "button.search-btn",
+    "form button.search-btn",
   ],
   resultCards: [
     "article.full-docsum",

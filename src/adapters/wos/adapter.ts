@@ -1,4 +1,4 @@
-import path from "node:path";
+﻿import path from "node:path";
 import type { Locator } from "playwright";
 import type {
   ExportCapability,
@@ -110,15 +110,14 @@ export class WosAdapter extends BaseSearchProviderAdapter {
   }
 
   override async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
-    if (/\/summary\//.test(context.page.url())) {
-      await this.openAdvancedSearch(context);
-    }
-
+    await this.openAdvancedSearch(context);
+    await this.clearInterferingUi(context);
     await this.ensureQueryBuilderVisible(context);
     const queryBox = await this.findQueryPreview(context);
-    await fillAndVerify(queryBox, query);
+    await runWithPageLoad(context.page, async () => {
+      await fillAndVerify(queryBox, query);
+    });
   }
-
   override async submitSearch(context: ProviderContext): Promise<SearchSummary> {
     await this.ensureQueryBuilderVisible(context);
     await this.clearInterferingUi(context);
@@ -851,6 +850,7 @@ function extractInstitution(bodyText: string): string | null {
   if (/Peking University/i.test(bodyText)) return "Peking University";
   return null;
 }
+
 
 
 

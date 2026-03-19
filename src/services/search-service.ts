@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+ï»¿import { randomUUID } from "node:crypto";
 import type {
   ExportCapability,
   ExportRequest,
@@ -93,7 +93,7 @@ export class SearchService {
     const session = await this.sessionManager.ensureRuntime(sessionId);
     const adapter = this.adapters.get(session.record.provider);
     await bringWindowOnScreen(session.runtime!.page);
-    notifyUser("ÐèÒªµÇÂ¼", `ÇëÔÚä¯ÀÀÆ÷ÖÐÍê³É ${session.record.provider} µÇÂ¼`);
+    notifyUser("ï¿½ï¿½Òªï¿½ï¿½Â¼", `ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ï¿½ ${session.record.provider} ï¿½ï¿½Â¼`);
     const result = await this.loginOrchestrator.waitForLoginTransition(sessionId, adapter, options);
     await sendWindowOffScreen(session.runtime!.page);
     return result;
@@ -116,8 +116,9 @@ export class SearchService {
 
   async runSearch(sessionId: string, input: { query?: string; sampleSize?: number } = {}): Promise<SearchObservation> {
     return this.withAdapter(sessionId, async (adapter, context) => {
-      if (input.query) {
-        await adapter.setCurrentQuery(context, input.query);
+      const queryToRun = input.query ?? await adapter.readCurrentQuery(context);
+      if (queryToRun !== null) {
+        await adapter.setCurrentQuery(context, queryToRun);
       }
       await this.sessionManager.setPhase(sessionId, "searching");
       await adapter.submitSearch(context);
@@ -290,7 +291,7 @@ export class SearchService {
       } catch (error) {
         if (isManualInterventionRequiredError(error)) {
           await bringWindowOnScreen(context.page);
-          notifyUser("ÐèÒªÈË¹¤²Ù×÷", error.message);
+          notifyUser("ï¿½ï¿½Òªï¿½Ë¹ï¿½ï¿½ï¿½ï¿½ï¿½", error.message);
           await this.sessionManager.setPhase(sessionId, "awaiting_manual_intervention", error.message);
           throw error;
         }
@@ -333,3 +334,4 @@ function objectOrUndefined(value: unknown): Record<string, unknown> | undefined 
   }
   return value as Record<string, unknown>;
 }
+

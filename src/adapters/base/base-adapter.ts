@@ -1,4 +1,4 @@
-import type { Locator } from "playwright";
+﻿import type { Locator } from "playwright";
 import type { AdapterSelectors } from "./adapter-selectors.js";
 import type {
   ExportCapability,
@@ -82,6 +82,8 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
   }
 
   async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
+    await this.openAdvancedSearch(context);
+    await this.clearInterferingUi(context);
     const input = await this.findQueryInput(context);
     await runWithPageLoad(context.page, async () => {
       await fillAndVerify(input, query);
@@ -239,3 +241,4 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     return `STARTUP_PROBE_QUERY_${this.descriptor.id.toUpperCase().replace(/[^A-Z0-9]/g, "_")}`;
   }
 }
+

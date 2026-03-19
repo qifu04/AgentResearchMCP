@@ -2,12 +2,12 @@
 
 export const ieeeSelectors: AdapterSelectors = {
   queryInputs: [
-    'form[name="adv-search-form"] input[aria-label="Search Term"]',
-    'main input[aria-label="Search Term"]',
+    'textarea#cmdTextArea[name="queryText"][aria-label="Enter Search Text"]',
+    "textarea#cmdTextArea",
   ],
   searchButtons: [
-    'form[name="adv-search-form"] button.stats-Adv_search',
-    'main button.stats-Adv_search',
+    "button.xpl-btn-primary.stats-Adv_Command_search",
+    "main button.stats-Adv_Command_search",
   ],
   resultCards: ["xpl-results-item"],
   filterGroups: ["xpl-facets li.refinement-section"],

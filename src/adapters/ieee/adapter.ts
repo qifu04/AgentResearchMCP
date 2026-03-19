@@ -59,7 +59,9 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       bodyText: document.body.innerText,
     }));
     const institution = /Access provided by:\s*([^\n]+)/i.exec(state.bodyText)?.[1]?.trim() ?? null;
-    const canSearch = Boolean(institution) || /Search Results/i.test(state.title) || state.url.includes("queryText=");
+    const onAdvancedSearchPage = /\/search\/advanced(?:\/command)?(?:[/?#]|$)/i.test(state.url);
+    const onResultsPage = /Search Results/i.test(state.title) || state.url.includes("queryText=");
+    const canSearch = Boolean(institution) || onAdvancedSearchPage || onResultsPage;
 
     return {
       kind: institution ? "institutional" : "anonymous",
@@ -69,11 +71,14 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       institutionAccess: institution,
       requiresInteractiveLogin: false,
       blockingReason: canSearch ? null : "IEEE session state is not ready for search.",
-      detectedBy: [institution ? "body:access-provided-by" : "body:anonymous"],
+      detectedBy: [
+        ...(institution ? ["body:access-provided-by"] : []),
+        ...(onAdvancedSearchPage ? ["url:advanced-search"] : []),
+        ...(onResultsPage ? ["url-or-title:results"] : institution ? [] : ["body:anonymous"]),
+      ],
       raw: state,
     };
   }
-
   override async readCurrentQuery(context: ProviderContext): Promise<string | null> {
     const url = new URL(context.page.url());
     const query = normalizeWhitespace(url.searchParams.get("queryText"));
@@ -90,12 +95,13 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   override async setCurrentQuery(context: ProviderContext, query: string): Promise<void> {
+    await this.openAdvancedSearch(context);
+    await this.clearInterferingUi(context);
     const input = await this.findAdvancedQueryInput(context);
     await runWithPageLoad(context.page, async () => {
       await fillAndVerify(input, query);
     });
   }
-
   override async submitSearch(context: ProviderContext): Promise<SearchSummary> {
     await this.waitForAdvancedSearchReady(context);
     const button = await this.findAdvancedSearchButton(context);
@@ -336,6 +342,8 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     return dialog;
   }
 }
+
+
 
 
 
