@@ -13,4 +13,16 @@ describe("parseIeeeSearchSummary", () => {
     expect(parsed.currentPage).toBe(1);
     expect(parsed.pageSize).toBe(25);
   });
+
+  it("handles the single-result heading format", () => {
+    const parsed = parseIeeeSearchSummary({
+      url: "https://ieeexplore.ieee.org/search/searchresult.jsp?action=search&queryText=(%22All%20Metadata%22:10.1109%2F5.771073)",
+      summaryText: 'Showing 1 of 1 result for ("All Metadata":10.1109/5.771073)',
+    });
+
+    expect(parsed.query).toContain("10.1109/5.771073");
+    expect(parsed.totalResults).toBe(1);
+    expect(parsed.currentPage).toBe(1);
+    expect(parsed.pageSize).toBe(1);
+  });
 });

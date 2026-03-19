@@ -14,7 +14,10 @@ export async function clickIfVisible(locator: Locator): Promise<boolean> {
     if (!(await locator.isVisible())) {
       return false;
     }
-    await locator.click();
+    await locator.click({
+      timeout: 1_500,
+      noWaitAfter: true,
+    });
     return true;
   } catch {
     return false;
@@ -83,9 +86,11 @@ export async function fillAndVerify(locator: Locator, value: string): Promise<vo
 
 export async function waitForDocumentReady(page: Page): Promise<void> {
   await page.waitForLoadState("domcontentloaded");
-  // Use a short timeout for networkidle — sites like WoS keep background
-  // requests alive (analytics, telemetry) that prevent networkidle from
-  // resolving.  A 5-second grace period is enough for most real content loads.
+  if (!shouldWaitForNetworkIdle(page)) {
+    return;
+  }
+  // Use a short timeout for networkidle. Some providers keep background
+  // requests alive (analytics, telemetry), so this remains best-effort.
   await page.waitForLoadState("networkidle", { timeout: 5_000 }).catch(() => undefined);
 }
 
@@ -101,4 +106,26 @@ export function normalizeWhitespace(value: string | null | undefined): string | 
     return null;
   }
   return value.replace(/\s+/g, " ").trim() || null;
+}
+
+function shouldWaitForNetworkIdle(page: Page): boolean {
+  try {
+    const url = page.url();
+    if (!url || url === "about:blank") {
+      return true;
+    }
+
+    const hostname = new URL(url).hostname.toLowerCase();
+    if (
+      hostname.includes("ieeexplore.ieee.org") ||
+      hostname.includes("webofscience") ||
+      hostname.includes("clarivate.cn")
+    ) {
+      return false;
+    }
+  } catch {
+    return true;
+  }
+
+  return true;
 }

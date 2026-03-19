@@ -11,6 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "dev": "tsx src/server/index.ts",
     "dev:http": "tsx src/server/http-server.ts",
+    "predebug:preflight": "npm run build",
+    "debug:preflight": "node dist/src/server/debug-preflight.js",
     "prestart:http": "npm run build",
     "start:http": "node dist/src/server/http-server.js",
     "test": "vitest run",

@@ -12,6 +12,7 @@ import type {
   SearchObservation,
   SearchProviderAdapter,
   SearchSummary,
+  StartupProbeOptions,
   StartupProbeResult,
 } from "../adapters/provider-contract.js";
 import { waitForDocumentReady } from "../browser/page-helpers.js";
@@ -181,10 +182,10 @@ export class SearchService {
     });
   }
 
-  async runStartupProbe(sessionId: string): Promise<StartupProbeResult> {
+  async runStartupProbe(sessionId: string, options: StartupProbeOptions = {}): Promise<StartupProbeResult> {
     return this.withAdapter(sessionId, async (adapter, context) => {
       await this.sessionManager.setPhase(sessionId, "searching");
-      const result = await adapter.runStartupProbe(context);
+      const result = await adapter.runStartupProbe(context, options);
       const session = await this.sessionManager.requireSession(sessionId);
       await removePath(session.paths.downloadsDir);
       await ensureDir(session.paths.downloadsDir);

@@ -16,7 +16,10 @@ if not "%BROWSER_PROXY_MODE%"=="" (
 ) else (
     echo Browser proxy mode via BROWSER_USE_SYSTEM_PROXY=%BROWSER_USE_SYSTEM_PROXY%
 )
+if /I "%STARTUP_PREFLIGHT_TRACE%"=="1" echo Startup preflight trace logging: enabled
+if /I "%STARTUP_PREFLIGHT_METRICS%"=="1" echo Startup preflight browser metrics: enabled
 echo Startup will block until provider login/export preflight succeeds.
+echo Server mode always validates all providers with full export checks.
 echo Press Ctrl+C to stop.
 echo.
 npm run start:http

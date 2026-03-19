@@ -168,6 +168,10 @@ export interface StartupProbeResult {
   raw?: unknown;
 }
 
+export interface StartupProbeOptions {
+  verifyExport?: boolean;
+}
+
 export interface SearchObservation {
   loginState: LoginState;
   queryProfile: QueryLanguageProfile;
@@ -208,5 +212,5 @@ export interface SearchProviderAdapter {
   clearSelection(context: ProviderContext): Promise<void>;
   detectExportCapability(context: ProviderContext): Promise<ExportCapability>;
   exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult>;
-  runStartupProbe(context: ProviderContext): Promise<StartupProbeResult>;
+  runStartupProbe(context: ProviderContext, options?: StartupProbeOptions): Promise<StartupProbeResult>;
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import type { SessionRecord } from "../src/types/session.js";
-import { StartupPreflightCoordinator } from "../src/core/startup-preflight.js";
+import { resolveStartupPreflightOptions, StartupPreflightCoordinator } from "../src/core/startup-preflight.js";
 import type { SearchService } from "../src/services/search-service.js";
 
 function createSessionRecord(id: string, provider: string): SessionRecord {
@@ -85,14 +85,15 @@ describe("StartupPreflightCoordinator", () => {
 
     const result = await coordinator.run();
 
-    expect(result).toEqual([
-      {
-        provider: "wos",
-        loginVerified: true,
-        exportVerified: true,
-        totalResults: 1,
-      },
-    ]);
+    expect(result).toHaveLength(1);
+    expect(result[0]).toMatchObject({
+      provider: "wos",
+      mode: "full",
+      loginVerified: true,
+      searchVerified: true,
+      exportVerified: true,
+      totalResults: 1,
+    });
     expect(calls).toEqual([
       "create:wos",
       "open:session-wos",
@@ -102,6 +103,7 @@ describe("StartupPreflightCoordinator", () => {
       "probe:session-wos",
       "close:session-wos",
     ]);
+    expect(service.runStartupProbe).toHaveBeenCalledWith("session-wos", { verifyExport: true });
   });
 
   it("always closes the session when preflight fails", async () => {
@@ -144,5 +146,118 @@ describe("StartupPreflightCoordinator", () => {
 
     await expect(coordinator.run()).rejects.toThrow(/Scopus.*probe failed/i);
     expect(closeSession).toHaveBeenCalledWith("session-scopus");
+  });
+
+  it("supports provider filtering and search-only mode for faster debugging", async () => {
+    const createSession = vi.fn(async ({ provider }: { provider: string }) => createSessionRecord(`session-${provider}`, provider));
+    const runStartupProbe = vi.fn(async () => ({
+      provider: "ieee",
+      query: "probe",
+      totalResults: 3,
+      exportVerified: false,
+      format: null,
+    }));
+    const service = {
+      createSession,
+      openAdvancedSearch: vi.fn(async (sessionId: string) => createSessionRecord(sessionId, "ieee")),
+      getLoginState: vi.fn(async () => ({
+        kind: "institutional",
+        authenticated: true,
+        canSearch: true,
+        canExport: true,
+        detectedBy: ["test"],
+      })),
+      waitForLogin: vi.fn(),
+      runStartupProbe,
+      closeSession: vi.fn(async (sessionId: string) => createSessionRecord(sessionId, "ieee")),
+      sessionManager: {
+        getSession: vi.fn(async () => null),
+      },
+    } as unknown as SearchService;
+
+    const coordinator = new StartupPreflightCoordinator(
+      service,
+      {
+        listDescriptors: () => [
+          {
+            id: "wos",
+            displayName: "Web of Science",
+            entryUrl: "https://example.com",
+            supportsManualLoginWait: true,
+            capabilities: {
+              rawQuery: true,
+              builderUi: true,
+              filters: true,
+              inlineAbstracts: true,
+              selection: true,
+              export: true,
+            },
+          },
+          {
+            id: "ieee",
+            displayName: "IEEE Xplore",
+            entryUrl: "https://example.com",
+            supportsManualLoginWait: true,
+            capabilities: {
+              rawQuery: true,
+              builderUi: true,
+              filters: true,
+              inlineAbstracts: true,
+              selection: true,
+              export: true,
+            },
+          },
+        ],
+      },
+      {
+        providers: ["ieee"],
+        mode: "search-only",
+      },
+    );
+
+    const result = await coordinator.run();
+
+    expect(createSession).toHaveBeenCalledTimes(1);
+    expect(createSession).toHaveBeenCalledWith({
+      provider: "ieee",
+      persistentProfile: true,
+    });
+    expect(runStartupProbe).toHaveBeenCalledWith("session-ieee", { verifyExport: false });
+    expect(result[0]).toMatchObject({
+      provider: "ieee",
+      mode: "search-only",
+      loginVerified: true,
+      searchVerified: true,
+      exportVerified: false,
+      totalResults: 3,
+    });
+  });
+});
+
+describe("resolveStartupPreflightOptions", () => {
+  it("parses filter, mode, trace, and metrics env vars", () => {
+    expect(
+      resolveStartupPreflightOptions({
+        STARTUP_PREFLIGHT_PROVIDERS: "wos, ieee",
+        STARTUP_PREFLIGHT_MODE: "search-only",
+        STARTUP_PREFLIGHT_TRACE: "1",
+        STARTUP_PREFLIGHT_METRICS: "true",
+        STARTUP_PREFLIGHT_MAX_ATTEMPTS: "4",
+      } as NodeJS.ProcessEnv),
+    ).toEqual({
+      providers: ["wos", "ieee"],
+      mode: "search-only",
+      trace: true,
+      collectBrowserMetrics: true,
+      maxAttempts: 4,
+    });
+  });
+
+  it("rejects invalid modes", () => {
+    expect(() =>
+      resolveStartupPreflightOptions({
+        STARTUP_PREFLIGHT_MODE: "export-only",
+      } as NodeJS.ProcessEnv),
+    ).toThrow(/STARTUP_PREFLIGHT_MODE/i);
   });
 });

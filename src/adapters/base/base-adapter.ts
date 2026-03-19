@@ -13,6 +13,7 @@ import type {
   ResultItem,
   SearchProviderAdapter,
   SearchSummary,
+  StartupProbeOptions,
   StartupProbeResult,
 } from "../provider-contract.js";
 import {
@@ -49,16 +50,14 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
   }
 
   async clearInterferingUi(context: ProviderContext): Promise<void> {
-    await runWithPageLoad(context.page, async () => {
-      const dismissors = [
-        context.page.getByRole("button", { name: /accept|agree|close/i }).first(),
-        context.page.getByRole("button", { name: /got it|skip/i }).first(),
-        context.page.getByRole("button", { name: /dismiss/i }).first(),
-      ];
-      for (const locator of dismissors) {
-        await clickIfVisible(locator);
-      }
-    });
+    const dismissors = [
+      context.page.getByRole("button", { name: /accept|agree|continue|close/i }).first(),
+      context.page.getByRole("button", { name: /got it/i }).first(),
+      context.page.getByRole("button", { name: /dismiss/i }).first(),
+    ];
+    for (const locator of dismissors) {
+      await clickIfVisible(locator);
+    }
   }
 
   async getQueryLanguageProfile(_context: ProviderContext): Promise<QueryLanguageProfile> {
@@ -152,7 +151,11 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     // Default no-op.
   }
 
-  async runStartupProbe(context: ProviderContext): Promise<StartupProbeResult> {
+  async runStartupProbe(
+    context: ProviderContext,
+    options: StartupProbeOptions = {},
+  ): Promise<StartupProbeResult> {
+    const verifyExport = options.verifyExport ?? true;
     const query = this.resolveStartupProbeQuery();
     await this.setCurrentQuery(context, query);
     const summary = await this.submitSearch(context);
@@ -165,42 +168,47 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
       );
     }
 
-    const exportCapability = await this.detectExportCapability(context);
-    if (exportCapability.requiresInteractiveLogin || exportCapability.blockingReason) {
-      throw new Error(
-        exportCapability.blockingReason ??
-          `${this.descriptor.displayName} startup probe is not export-ready yet.`,
-      );
-    }
+    let exportCapability: ExportCapability | undefined;
+    let result: ExportResult | undefined;
 
-    const result = await this.exportNative(context, {
-      scope: "all",
-      start: 1,
-      end: 1,
-      includeAbstracts: false,
-      raw: {
-        startupProbe: true,
-      },
-    });
+    if (verifyExport) {
+      exportCapability = await this.detectExportCapability(context);
+      if (exportCapability.requiresInteractiveLogin || exportCapability.blockingReason) {
+        throw new Error(
+          exportCapability.blockingReason ??
+            `${this.descriptor.displayName} startup probe is not export-ready yet.`,
+        );
+      }
 
-    if (!result.path && (!result.chunks || result.chunks.length === 0)) {
-      throw new Error(`${this.descriptor.displayName} startup probe did not produce an export artifact.`);
-    }
+      result = await this.exportNative(context, {
+        scope: "all",
+        start: 1,
+        end: 1,
+        includeAbstracts: false,
+        raw: {
+          startupProbe: true,
+        },
+      });
 
-    if (result.path) {
-      await removePath(result.path);
+      if (!result.path && (!result.chunks || result.chunks.length === 0)) {
+        throw new Error(`${this.descriptor.displayName} startup probe did not produce an export artifact.`);
+      }
+
+      if (result.path) {
+        await removePath(result.path);
+      }
     }
 
     return {
       provider: this.descriptor.id,
       query,
       totalResults,
-      exportVerified: true,
-      format: result.format,
-      fileName: result.fileName ?? null,
+      exportVerified: verifyExport,
+      format: result?.format ?? null,
+      fileName: result?.fileName ?? null,
       raw: {
         summary,
-        exportCapability,
+        exportCapability: exportCapability ?? null,
       },
     };
   }
