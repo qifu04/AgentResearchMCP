@@ -172,6 +172,20 @@ export interface StartupProbeOptions {
   verifyExport?: boolean;
 }
 
+export interface SearchResultPreview {
+  indexOnPage: number;
+  title: string;
+  href?: string | null;
+  abstractPreview?: string | null;
+}
+
+export interface MinimalSearchResult {
+  query: string;
+  totalResultsText?: string | null;
+  totalResults?: number | null;
+  results: SearchResultPreview[];
+}
+
 export interface SearchObservation {
   loginState: LoginState;
   queryProfile: QueryLanguageProfile;
@@ -195,11 +209,11 @@ export interface ToolEnvelope<T> {
 
 export interface SearchProviderAdapter {
   readonly descriptor: ProviderDescriptor;
+  readonly queryProfile: QueryLanguageProfile;
 
   openAdvancedSearch(context: ProviderContext): Promise<void>;
   clearInterferingUi(context: ProviderContext): Promise<void>;
   detectLoginState(context: ProviderContext): Promise<LoginState>;
-  getQueryLanguageProfile(context: ProviderContext): Promise<QueryLanguageProfile>;
   readCurrentQuery(context: ProviderContext): Promise<string | null>;
   setCurrentQuery(context: ProviderContext, query: string): Promise<void>;
   submitSearch(context: ProviderContext): Promise<SearchSummary>;

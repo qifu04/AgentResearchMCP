@@ -1,13 +1,13 @@
-# 适配器开发指南
+﻿# 适配器开发指南
 
-为 Agent Research MCP 添加新的学术数据库支持。
+为 Agent Research MCP 添加新的学术数据库支持。`startup-preflight` 仍会在服务启动时做内部登录/搜索/导出冒烟验证，但公开 MCP 工作流已经收敛为最小检索闭环。
 
 ## 架构概览
 
 ```
 MCP Client ↔ server/index.ts
                ↓
-           server/tool-registry.ts → ~22 个 MCP 工具
+           server/tool-registry.ts → 最小公开 MCP 工具集
                ↓
            services/search-service.ts → 编排所有操作
                ↓
@@ -445,13 +445,11 @@ start-http.bat
 
 启动后通过 MCP 客户端依次调用验证：
 
-1. `create_session({ provider: "your-provider" })` — 会话创建
-2. `open_advanced_search` — 打开检索页面
-3. `get_login_state` — 登录检测
-4. `get_query_language_profile` — 检查字段标签是否完整
-5. `set_query` + `run_search` — 执行检索
-6. `read_result_sample` — 结果提取
-7. `export_results` — 导出
+1. `create_session({ provider: "your-provider" })` — 会话创建，并确认返回的 `queryProfile` 完整
+2. `run_search({ sessionId, query, sampleSize })` — 执行检索，检查总数与前 N 条标题/摘要
+3. `read_current_query` — 验证页面中的当前检索式可恢复
+4. `export_results` — 导出当前检索结果为 RIS
+5. `close_session` — 关闭会话
 
 ---
 
@@ -513,3 +511,4 @@ import { foo } from "./bar";     // ✗
 | `wos/` | 高 | 自定义按钮定位，API 响应拦截，overlay 处理 |
 
 建议从 PubMed 适配器开始阅读，理解整体流程后再参考更复杂的实现。
+

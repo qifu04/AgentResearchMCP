@@ -60,10 +60,6 @@ export abstract class BaseSearchProviderAdapter implements SearchProviderAdapter
     }
   }
 
-  async getQueryLanguageProfile(_context: ProviderContext): Promise<QueryLanguageProfile> {
-    return this.queryProfile;
-  }
-
   async readCurrentQuery(context: ProviderContext): Promise<string | null> {
     if (this.queryParamName) {
       const url = new URL(context.page.url());

@@ -6,8 +6,8 @@ import type {
   FilterApplyRequest,
   FilterGroup,
   LoginState,
+  MinimalSearchResult,
   ProviderId,
-  QueryLanguageProfile,
   ResultItem,
   SearchObservation,
   SearchProviderAdapter,
@@ -99,10 +99,6 @@ export class SearchService {
     return result;
   }
 
-  async getQueryLanguageProfile(sessionId: string): Promise<QueryLanguageProfile> {
-    return this.withAdapter(sessionId, async (adapter, context) => adapter.getQueryLanguageProfile(context));
-  }
-
   async readCurrentQuery(sessionId: string): Promise<string | null> {
     return this.withAdapter(sessionId, async (adapter, context) => adapter.readCurrentQuery(context));
   }
@@ -114,16 +110,33 @@ export class SearchService {
     });
   }
 
-  async runSearch(sessionId: string, input: { query?: string; sampleSize?: number } = {}): Promise<SearchObservation> {
+  async runSearch(sessionId: string, input: { query?: string; sampleSize?: number } = {}): Promise<MinimalSearchResult> {
     return this.withAdapter(sessionId, async (adapter, context) => {
       const queryToRun = input.query ?? await adapter.readCurrentQuery(context);
       if (queryToRun !== null) {
         await adapter.setCurrentQuery(context, queryToRun);
       }
       await this.sessionManager.setPhase(sessionId, "searching");
-      await adapter.submitSearch(context);
+      const summary = await adapter.submitSearch(context);
       await this.sessionManager.setPhase(sessionId, "search_ready");
-      return this.collectObservation(sessionId, adapter, input.sampleSize ?? 5);
+      await waitForDocumentReady(context.page);
+
+      const [items, withAbstracts] = await Promise.all([
+        adapter.readResultItems(context, input.sampleSize ?? 5),
+        adapter.readResultAbstracts(context, input.sampleSize ?? 5),
+      ]);
+
+      return {
+        query: input.query ?? summary.query ?? queryToRun ?? "",
+        totalResultsText: summary.totalResultsText ?? null,
+        totalResults: summary.totalResults ?? null,
+        results: mergeResultItems(items, withAbstracts).map((item) => ({
+          indexOnPage: item.indexOnPage,
+          title: item.title,
+          href: item.href ?? null,
+          abstractPreview: item.abstractPreview ?? null,
+        })),
+      };
     });
   }
 
@@ -241,7 +254,7 @@ export class SearchService {
 
     const [loginState, queryProfile, summary, filters, exportCapability] = await Promise.all([
       adapter.detectLoginState(context),
-      adapter.getQueryLanguageProfile(context),
+      Promise.resolve(adapter.queryProfile),
       adapter.readSearchSummary(context),
       adapter.listFilters(context),
       adapter.detectExportCapability(context),

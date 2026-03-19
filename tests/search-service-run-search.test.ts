@@ -56,6 +56,18 @@ function createHarness(currentQuery: string | null) {
         export: true,
       },
     },
+    queryProfile: {
+      provider: "ieee",
+      supportsRawEditor: true,
+      supportsBuilderUi: true,
+      supportsUrlQueryRecovery: true,
+      fieldTags: [],
+      booleanOperators: ["AND", "OR", "NOT"],
+      examples: [],
+      constraints: [],
+      recommendedPatterns: [],
+      antiPatterns: [],
+    },
     openAdvancedSearch: vi.fn(),
     clearInterferingUi: vi.fn(),
     detectLoginState: vi.fn(async () => ({
@@ -109,8 +121,22 @@ function createHarness(currentQuery: string | null) {
       queryId: null,
       sort: "relevance",
     })),
-    readResultItems: vi.fn(async () => []),
-    readResultAbstracts: vi.fn(async () => []),
+    readResultItems: vi.fn(async () => [
+      {
+        provider: "ieee",
+        indexOnPage: 1,
+        title: "Result Title",
+        href: "https://example.com/result",
+      },
+    ]),
+    readResultAbstracts: vi.fn(async () => [
+      {
+        provider: "ieee",
+        indexOnPage: 1,
+        title: "Result Title",
+        abstractPreview: "Result abstract",
+      },
+    ]),
     listFilters: vi.fn(async () => []),
     applyFilters: vi.fn(),
     selectResultsByIndex: vi.fn(),
@@ -163,12 +189,25 @@ describe("SearchService.runSearch", () => {
     const { service, adapter, calls } = createHarness("TITLE(existing)");
     const query = '"Document Title":"deep learning"';
 
-    await service.runSearch("session-1", { query });
+    const result = await service.runSearch("session-1", { query });
 
     expect(adapter.readCurrentQuery).not.toHaveBeenCalled();
     expect(adapter.setCurrentQuery).toHaveBeenCalledOnce();
     expect(adapter.setCurrentQuery).toHaveBeenCalledWith(expect.anything(), query);
     expect(calls).toEqual([`setCurrentQuery:${query}`, "submitSearch"]);
+    expect(result).toEqual({
+      query,
+      totalResultsText: "1",
+      totalResults: 1,
+      results: [
+        {
+          indexOnPage: 1,
+          title: "Result Title",
+          href: "https://example.com/result",
+          abstractPreview: "Result abstract",
+        },
+      ],
+    });
   });
 
   it("reopens advanced search with the recovered current query when query is omitted", async () => {

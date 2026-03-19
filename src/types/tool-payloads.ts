@@ -1,4 +1,9 @@
-import type { ExportRequest, ProviderId } from "../adapters/provider-contract.js";
+﻿import type { ProviderId, QueryLanguageProfile } from "../adapters/provider-contract.js";
+
+export interface ProviderSummary {
+  id: ProviderId;
+  displayName: string;
+}
 
 export interface CreateSessionInput {
   provider: ProviderId;
@@ -6,12 +11,15 @@ export interface CreateSessionInput {
   persistentProfile?: boolean;
 }
 
-export interface SessionInput {
+export interface CreateSessionOutput {
   sessionId: string;
+  provider: ProviderId;
+  displayName: string;
+  queryProfile: QueryLanguageProfile;
 }
 
-export interface SetQueryInput extends SessionInput {
-  query: string;
+export interface SessionInput {
+  sessionId: string;
 }
 
 export interface RunSearchInput extends SessionInput {
@@ -19,38 +27,6 @@ export interface RunSearchInput extends SessionInput {
   sampleSize?: number;
 }
 
-export interface ResultSampleInput extends SessionInput {
-  limit?: number;
-}
-
-export interface WaitForLoginInput extends SessionInput {
-  capability?: "search" | "export" | "personal";
-  timeoutMs?: number;
-  pollMs?: number;
-}
-
-export interface ApplyFiltersInput extends SessionInput {
-  filters: Array<{
-    key: string;
-    values?: string[];
-    from?: string | number | null;
-    to?: string | number | null;
-  }>;
-}
-
-export interface SelectResultsInput extends SessionInput {
-  indices: number[];
-}
-
 export interface ExportResultsInput extends SessionInput {
-  request: ExportRequest;
-}
-
-export interface ConvertExportToRisInput extends SessionInput {
-  filePath: string;
-  format?: string;
-}
-
-export interface CaptureArtifactsInput extends SessionInput {
-  label?: string;
+  outputDir?: string;
 }
