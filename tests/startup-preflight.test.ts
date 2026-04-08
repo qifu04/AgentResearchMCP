@@ -344,7 +344,7 @@ describe("StartupPreflightCoordinator", () => {
     ]);
   });
 
-  it("waits for all parallel providers to settle before surfacing combined failures", async () => {
+  it("waits for all parallel providers to settle before returning partial successes", async () => {
     const closeSession = vi.fn(async (sessionId: string) => createSessionRecord(sessionId, sessionId.replace("session-", "")));
     let releaseSlowProbe!: () => void;
     const slowProbeGate = new Promise<void>((resolve) => {
@@ -422,7 +422,15 @@ describe("StartupPreflightCoordinator", () => {
 
     releaseSlowProbe();
 
-    await expect(runPromise).rejects.toThrow(/Scopus/i);
+    const result = await runPromise;
+
+    expect(result).toEqual([
+      expect.objectContaining({
+        provider: "wos",
+        exportVerified: true,
+        totalResults: 1,
+      }),
+    ]);
     expect(closeSession).toHaveBeenCalledTimes(2);
     expect(closeSession).toHaveBeenCalledWith("session-wos");
     expect(closeSession).toHaveBeenCalledWith("session-scopus");

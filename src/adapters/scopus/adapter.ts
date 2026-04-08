@@ -149,6 +149,7 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       const user = (window as typeof window & {
         isLoggedInUser?: boolean;
         isIndividuallyAuthenticated?: boolean;
+        isPreviewPage?: boolean;
         ScopusUser?: {
           accessTypeAA?: string;
           usagePathInfo?: string;
@@ -160,6 +161,7 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       return {
         url: location.href,
         title: document.title,
+        isPreviewPage: (window as typeof window & { isPreviewPage?: boolean }).isPreviewPage ?? null,
         isLoggedInUser: (window as typeof window & { isLoggedInUser?: boolean }).isLoggedInUser ?? null,
         isIndividuallyAuthenticated:
           (window as typeof window & { isIndividuallyAuthenticated?: boolean }).isIndividuallyAuthenticated ?? null,
@@ -177,17 +179,25 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
     const currentUrl = new URL(state.url);
     const onScopusDomain = currentUrl.hostname.endsWith("scopus.com");
     const onElsevierLogin = currentUrl.hostname.includes("id.elsevier.com");
+    const hasRegisteredAccessType = state.accessTypeAA?.includes("REG") ?? false;
+    const hasRegisteredUsagePath = state.usagePathInfo?.includes("REG_") ?? false;
 
     // Detect known unauthenticated landing pages — do NOT trust stale
     // JavaScript globals from the persistent profile when session is expired.
-    // Only match the preview/home/error pages, NOT callback or other functional paths.
-    const isOnPreviewPage = onScopusDomain && /^\/pages\/(?:home|error)\b/.test(currentUrl.pathname);
-    const sessionExpired = isOnPreviewPage || onElsevierLogin;
+    // Prefer the page-provided preview flag instead of broad `/pages/home`
+    // matching because successful personal logins can also land on Scopus home.
+    const isOnPreviewPage = onScopusDomain && state.isPreviewPage === true;
+    const isOnErrorPage = onScopusDomain && /^\/pages\/error\b/.test(currentUrl.pathname);
+    const sessionExpired = isOnPreviewPage || isOnErrorPage || onElsevierLogin;
 
     const isPersonal = !sessionExpired && (
       state.isLoggedInUser === true ||
       state.isIndividuallyAuthenticated === true ||
-      state.isIndividual === true
+      state.isIndividual === true ||
+      hasRegisteredAccessType ||
+      hasRegisteredUsagePath ||
+      state.hasUserMenu ||
+      Boolean(state.email)
     );
     const isInstitutional =
       !sessionExpired &&
@@ -196,7 +206,6 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
       (state.accessTypeAA?.includes("INST") ||
         state.accessTypeAA?.includes("ANON") ||
         state.usagePathInfo?.includes("ANON_IP") ||
-        state.usagePathInfo?.includes("REG_SHIBBOLETH") ||
         state.hasSearchForm);
 
     return {

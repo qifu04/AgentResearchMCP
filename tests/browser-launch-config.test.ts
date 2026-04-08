@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { resolveBrowserLaunchConfig } from "../src/browser/browser-launch-config.js";
 
 describe("resolveBrowserLaunchConfig", () => {
-  it("defaults to direct mode", () => {
+  it("defaults to system mode", () => {
     expect(resolveBrowserLaunchConfig({} as NodeJS.ProcessEnv)).toEqual({
-      proxyMode: "direct",
+      proxyMode: "system",
     });
   });
 
