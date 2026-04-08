@@ -25,7 +25,7 @@ function resolveBrowserProxyMode(env: NodeJS.ProcessEnv): BrowserProxyMode {
 
   const useSystemProxy = env.BROWSER_USE_SYSTEM_PROXY?.trim();
   if (!useSystemProxy) {
-    return "direct";
+    return "system";
   }
 
   const normalized = useSystemProxy.toLowerCase();

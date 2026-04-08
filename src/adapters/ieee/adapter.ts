@@ -18,6 +18,7 @@ import {
   textContentOrNull,
 } from "../../browser/page-helpers.js";
 import { BaseSearchProviderAdapter } from "../base/base-adapter.js";
+import { ManualInterventionRequiredError } from "../../core/manual-intervention.js";
 import { ieeeDescriptor } from "./descriptor.js";
 import { convertCsvToRis } from "../../core/ris-converter.js";
 import { writeTextFile } from "../../utils/fs.js";
@@ -34,7 +35,9 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   readonly submitUrlPattern = /queryText=/;
 
   override async openAdvancedSearch(context: ProviderContext): Promise<void> {
-    await super.openAdvancedSearch(context);
+    // IEEE never fires domcontentloaded reliably — use "commit" and then
+    // wait for the Angular-rendered query input to appear instead.
+    await context.page.goto(this.descriptor.entryUrl, { waitUntil: "commit" });
     await this.waitForAdvancedSearchReady(context);
   }
 
@@ -305,12 +308,44 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   private async waitForAdvancedSearchReady(context: ProviderContext): Promise<void> {
+    // IEEE's Angular SPA may take a long time to bootstrap, and may be
+    // entirely blocked by Imperva/Incapsula bot detection (fingerprint2.js).
+    // We wait for the Angular app root to appear first.
+    const appRoot = context.page.locator("xpl-root, app-root").first();
+    const appMounted = await appRoot.waitFor({ state: "attached", timeout: 30_000 }).then(() => true).catch(() => false);
+
+    if (!appMounted) {
+      // Check for bot detection: the HTML shell loads but Angular never mounts
+      const isBotBlocked = await context.page.evaluate(() => {
+        const hasFingerprint = !!document.querySelector('script[src*="fingerprint"]');
+        const hasApmTag = !!document.querySelector("apm_do_not_touch");
+        const noAppRoot = !document.querySelector("xpl-root, app-root");
+        return (hasFingerprint || hasApmTag) && noAppRoot;
+      });
+
+      if (isBotBlocked) {
+        throw new ManualInterventionRequiredError(
+          "IEEE Xplore is blocked by bot detection (Imperva). Please open the headed browser, wait for or solve any challenge, then retry.",
+          {
+            provider: "ieee",
+            blockerType: "captcha",
+            instructions: [
+              "The headed browser window should show the IEEE Xplore page.",
+              "Wait for any Imperva/Incapsula challenge to auto-resolve, or solve a CAPTCHA if presented.",
+              "Once the page fully loads (you can see the search form), retry the same MCP action.",
+              "The persistent browser profile will cache the solution for future sessions.",
+            ],
+          },
+        );
+      }
+    }
+
     const loading = context.page.getByText(/^Loading\.\.\.$/i).first();
     await loading.waitFor({ state: "hidden", timeout: 15_000 }).catch(() => undefined);
 
     for (const selector of this.selectors.queryInputs) {
       const locator = context.page.locator(selector).first();
-      await locator.waitFor({ state: "visible", timeout: 5_000 }).catch(() => undefined);
+      await locator.waitFor({ state: "visible", timeout: 10_000 }).catch(() => undefined);
       if (await locator.isVisible().catch(() => false)) {
         return;
       }

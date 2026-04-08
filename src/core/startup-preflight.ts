@@ -125,26 +125,37 @@ export class StartupPreflightCoordinator {
         } => value.entry.status === "rejected",
       );
 
+    const successes = settled.filter((entry) => entry.status === "fulfilled");
+
     if (failures.length > 0) {
-      throw new Error(
-        failures
-          .map(({ descriptor, entry }) => {
-            const reason = entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
-            if (reason.toLowerCase().includes(descriptor.displayName.toLowerCase())) {
-              return reason;
-            }
-            return `Startup preflight failed for ${descriptor.displayName}: ${reason}`;
-          })
-          .join("; "),
-      );
+      for (const { descriptor, entry } of failures) {
+        const reason = entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
+        logger.warn("Startup preflight failed for provider (non-fatal)", {
+          provider: descriptor.id,
+          error: reason,
+        });
+      }
+
+      if (successes.length === 0) {
+        throw new Error(
+          failures
+            .map(({ descriptor, entry }) => {
+              const reason = entry.reason instanceof Error ? entry.reason.message : String(entry.reason);
+              if (reason.toLowerCase().includes(descriptor.displayName.toLowerCase())) {
+                return reason;
+              }
+              return `Startup preflight failed for ${descriptor.displayName}: ${reason}`;
+            })
+            .join("; "),
+        );
+      }
     }
 
-    const results = settled.map((entry) => {
-      if (entry.status !== "fulfilled") {
-        throw new Error("Startup preflight settled without a result.");
-      }
-      return entry.value.result;
-    });
+    const results = settled
+      .filter((entry): entry is PromiseFulfilledResult<{ descriptor: ProviderDescriptor; result: StartupPreflightResult }> =>
+        entry.status === "fulfilled",
+      )
+      .map((entry) => entry.value.result);
 
     logger.info("Startup preflight completed", {
       elapsedMs: roundElapsedMs(startedAt),

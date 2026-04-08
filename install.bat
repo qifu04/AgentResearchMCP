@@ -1,41 +1,39 @@
 @echo off
-chcp 65001 >nul
+cd /d "%~dp0"
 echo ============================================
-echo   Agent Research MCP - 首次安装
+echo   Agent Research MCP - Install
 echo ============================================
 echo.
 
-cd /d "%~dp0"
-
-echo [1/4] 安装 npm 依赖...
+echo [1/4] Installing npm dependencies...
 call npm install
 if %errorlevel% neq 0 (
-    echo 错误: npm install 失败，请检查 Node.js 是否已安装
+    echo Error: npm install failed. Check that Node.js is installed.
     pause
     exit /b 1
 )
 echo.
 
-echo [2/4] 安装 Playwright Chromium 浏览器...
+echo [2/4] Installing Playwright Chromium browser...
 call npx playwright install chromium
 if %errorlevel% neq 0 (
-    echo 错误: Playwright 浏览器安装失败
+    echo Error: Playwright browser install failed.
     pause
     exit /b 1
 )
 echo.
 
-echo [3/4] 编译 TypeScript...
+echo [3/4] Compiling TypeScript...
 call npm run build
 if %errorlevel% neq 0 (
-    echo 错误: 编译失败
+    echo Error: Build failed.
     pause
     exit /b 1
 )
 echo.
 
-echo [4/4] 安装完成！
+echo [4/4] Install complete!
 echo.
-echo 现在可以双击 start-http.bat 启动服务器。
+echo You can now double-click start-http.bat to start the server.
 echo.
 pause

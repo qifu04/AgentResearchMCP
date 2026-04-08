@@ -169,34 +169,54 @@ export class ScopusAdapter extends BaseSearchProviderAdapter {
         isIndividual: user?.isIndividual ?? null,
         hasUserMenu: Boolean(document.querySelector("#user-menu")),
         hasSigninButton: Boolean(document.querySelector("#signin_link_move")),
+        hasSearchForm: Boolean(document.querySelector("form#advSearchForm")),
         bodyText: document.body.innerText,
       };
     });
 
-    const isPersonal = state.isLoggedInUser === true || state.isIndividuallyAuthenticated === true || state.isIndividual === true;
-    const onScopusDomain = new URL(state.url).hostname.endsWith("scopus.com");
+    const currentUrl = new URL(state.url);
+    const onScopusDomain = currentUrl.hostname.endsWith("scopus.com");
+    const onElsevierLogin = currentUrl.hostname.includes("id.elsevier.com");
+
+    // Detect known unauthenticated landing pages — do NOT trust stale
+    // JavaScript globals from the persistent profile when session is expired.
+    // Only match the preview/home/error pages, NOT callback or other functional paths.
+    const isOnPreviewPage = onScopusDomain && /^\/pages\/(?:home|error)\b/.test(currentUrl.pathname);
+    const sessionExpired = isOnPreviewPage || onElsevierLogin;
+
+    const isPersonal = !sessionExpired && (
+      state.isLoggedInUser === true ||
+      state.isIndividuallyAuthenticated === true ||
+      state.isIndividual === true
+    );
     const isInstitutional =
+      !sessionExpired &&
       !isPersonal &&
       onScopusDomain &&
       (state.accessTypeAA?.includes("INST") ||
         state.accessTypeAA?.includes("ANON") ||
         state.usagePathInfo?.includes("ANON_IP") ||
         state.usagePathInfo?.includes("REG_SHIBBOLETH") ||
-        state.bodyText.includes("Scopus"));
+        state.hasSearchForm);
 
     return {
-      kind: isPersonal ? "personal" : isInstitutional ? "institutional" : "anonymous",
+      kind: sessionExpired ? "anonymous" : isPersonal ? "personal" : isInstitutional ? "institutional" : "anonymous",
       authenticated: isPersonal,
-      canSearch: isPersonal || isInstitutional,
+      canSearch: !sessionExpired && (isPersonal || isInstitutional),
       canExport: isPersonal,
       institutionAccess: isInstitutional ? "Scopus institutional session" : null,
       requiresInteractiveLogin: !isPersonal,
-      blockingReason: isPersonal ? null : "Scopus export requires a personal logged-in account.",
+      blockingReason: sessionExpired
+        ? "Scopus session expired. Please log in again via your institution."
+        : isPersonal
+          ? null
+          : "Scopus export requires a personal logged-in account.",
       detectedBy: [
         "window.isLoggedInUser",
         "window.isIndividuallyAuthenticated",
         "window.ScopusUser.accessTypeAA",
         "#user-menu",
+        ...(sessionExpired ? [`url:${currentUrl.pathname}`] : []),
       ],
       raw: state,
     };

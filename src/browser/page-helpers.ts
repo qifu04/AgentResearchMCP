@@ -85,7 +85,13 @@ export async function fillAndVerify(locator: Locator, value: string): Promise<vo
 }
 
 export async function waitForDocumentReady(page: Page): Promise<void> {
-  await page.waitForLoadState("domcontentloaded");
+  if (shouldSkipDomContentLoaded(page)) {
+    // Some SPAs (e.g. IEEE Xplore) never fire domcontentloaded reliably
+    // because they keep long-running subresource fetches open.  Skip the
+    // wait entirely — callers should wait for specific UI elements instead.
+  } else {
+    await page.waitForLoadState("domcontentloaded");
+  }
   if (!shouldWaitForNetworkIdle(page)) {
     return;
   }
@@ -106,6 +112,19 @@ export function normalizeWhitespace(value: string | null | undefined): string | 
     return null;
   }
   return value.replace(/\s+/g, " ").trim() || null;
+}
+
+function shouldSkipDomContentLoaded(page: Page): boolean {
+  try {
+    const url = page.url();
+    if (!url || url === "about:blank") {
+      return false;
+    }
+    const hostname = new URL(url).hostname.toLowerCase();
+    return hostname.includes("ieeexplore.ieee.org");
+  } catch {
+    return false;
+  }
 }
 
 function shouldWaitForNetworkIdle(page: Page): boolean {
