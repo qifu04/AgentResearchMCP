@@ -26,6 +26,21 @@ import { parseIeeeSearchSummary } from "./search-parsing.js";
 import { ieeeQueryProfile } from "./query-profile.js";
 import { ieeeSelectors } from "./selectors.js";
 
+interface IeeePageSignals {
+  url: string;
+  title: string;
+  bodyText: string;
+  institution: string | null;
+  onAdvancedSearchPage: boolean;
+  onResultsPage: boolean;
+  hasVisibleQueryInput: boolean;
+  hasVisibleExportButton: boolean;
+  hasResultCards: boolean;
+  hasSearchSummary: boolean;
+  hasErrorPage: boolean;
+  hasErrorCode418: boolean;
+}
+
 export class IeeeAdapter extends BaseSearchProviderAdapter {
   readonly descriptor = ieeeDescriptor;
   readonly queryProfile = ieeeQueryProfile;
@@ -56,28 +71,33 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   async detectLoginState(context: ProviderContext): Promise<LoginState> {
-    const state = await context.page.evaluate(() => ({
-      url: location.href,
-      title: document.title,
-      bodyText: document.body.innerText,
-    }));
-    const institution = /Access provided by:\s*([^\n]+)/i.exec(state.bodyText)?.[1]?.trim() ?? null;
-    const onAdvancedSearchPage = /\/search\/advanced(?:\/command)?(?:[/?#]|$)/i.test(state.url);
-    const onResultsPage = /Search Results/i.test(state.title) || state.url.includes("queryText=");
-    const canSearch = Boolean(institution) || onAdvancedSearchPage || onResultsPage;
+    const state = await this.readPageSignals(context);
+    const canSearch = Boolean(state.institution) && !state.hasErrorPage;
+    const canExport = Boolean(state.institution) && !state.hasErrorPage;
+    const blockingReason = canExport
+      ? null
+      : state.hasErrorPage
+        ? state.hasErrorCode418
+          ? "IEEE Xplore returned an unavailable-load page (Error 418), so the session is not search/export ready."
+          : "IEEE Xplore returned an unavailable-load page, so the session is not search/export ready."
+        : "IEEE institutional access was not detected.";
 
     return {
-      kind: institution ? "institutional" : "anonymous",
+      kind: state.institution ? "institutional" : "anonymous",
       authenticated: false,
       canSearch,
-      canExport: canSearch,
-      institutionAccess: institution,
-      requiresInteractiveLogin: false,
-      blockingReason: canSearch ? null : "IEEE session state is not ready for search.",
+      canExport,
+      institutionAccess: state.institution,
+      requiresInteractiveLogin: !state.institution && !state.hasErrorPage,
+      blockingReason,
       detectedBy: [
-        ...(institution ? ["body:access-provided-by"] : []),
-        ...(onAdvancedSearchPage ? ["url:advanced-search"] : []),
-        ...(onResultsPage ? ["url-or-title:results"] : institution ? [] : ["body:anonymous"]),
+        ...(state.institution ? ["body:access-provided-by"] : []),
+        ...(state.onAdvancedSearchPage ? ["url:advanced-search"] : []),
+        ...(state.onResultsPage ? ["url:results"] : []),
+        ...(state.hasVisibleQueryInput ? ["dom:advanced-query-input"] : []),
+        ...(state.hasVisibleExportButton ? ["dom:export-button"] : []),
+        ...(state.hasErrorPage ? [state.hasErrorCode418 ? "page:error-418" : "page:error"] : []),
+        ...(!state.institution && !state.hasErrorPage ? ["body:anonymous"] : []),
       ],
       raw: state,
     };
@@ -120,6 +140,7 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     await context.page.locator("xpl-results-item, xpl-search-dashboard .Dashboard-header h1").first()
       .waitFor({ state: "visible", timeout: 30_000 })
       .catch(() => undefined);
+    await this.ensureNotBlockedByWaf(context, "searching");
 
     return this.readSearchSummary(context);
   }
@@ -233,12 +254,25 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
     }
   }
 
-  async detectExportCapability(): Promise<ExportCapability> {
+  async detectExportCapability(context: ProviderContext): Promise<ExportCapability> {
+    const loginState = await this.detectLoginState(context);
+    const state = await this.readPageSignals(context);
+    const blockingReason =
+      !loginState.canExport
+        ? loginState.blockingReason ?? "IEEE export is not ready."
+        : state.hasVisibleExportButton
+          ? null
+          : state.onAdvancedSearchPage
+            ? "IEEE export is only available on a results page. Run a search before exporting."
+            : "IEEE export controls are not visible on the current page.";
+
     return {
-      requiresInteractiveLogin: false,
+      requiresInteractiveLogin: loginState.requiresInteractiveLogin,
       maxBatch: null,
-      blockingReason: null,
+      blockingReason,
       raw: {
+        loginState,
+        page: state,
         defaultResultsFormat: "csv",
         defaultResultsLimit: 1000,
         citationExportFormats: ["plain text", "bibtex", "ris", "refworks"],
@@ -247,6 +281,11 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   async exportNative(context: ProviderContext, request: ExportRequest): Promise<ExportResult> {
+    const exportCapability = await this.detectExportCapability(context);
+    if (exportCapability.requiresInteractiveLogin || exportCapability.blockingReason) {
+      throw new Error(exportCapability.blockingReason ?? "IEEE export is not ready.");
+    }
+
     await this.clearInterferingUi(context);
     return this.exportCsv(context, request);
   }
@@ -365,6 +404,7 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
   }
 
   private async openExportDialog(context: ProviderContext) {
+    await this.ensureNotBlockedByWaf(context, "opening the export dialog");
     const exportButton = await this.findFirstVisible(context, this.selectors.exportButtons);
     await exportButton.scrollIntoViewIfNeeded().catch(() => undefined);
     await exportButton.click({ force: true });
@@ -375,6 +415,82 @@ export class IeeeAdapter extends BaseSearchProviderAdapter {
       .last();
     await dialog.waitFor({ state: "visible", timeout: 15_000 });
     return dialog;
+  }
+
+  private async ensureNotBlockedByWaf(context: ProviderContext, activity: string): Promise<void> {
+    const state = await this.readPageSignals(context);
+    const onTspdPage = /\/TSPD(?:\/|[/?#]|$)/i.test(state.url);
+    if (!state.hasErrorPage && !onTspdPage) {
+      return;
+    }
+
+    const detail = state.hasErrorCode418 ? "Error 418 unavailable-load page" : onTspdPage ? "TSPD challenge page" : "provider error page";
+    throw new ManualInterventionRequiredError(
+      `IEEE Xplore triggered anti-bot protection while ${activity} (${detail}). Please recover in the current browser window, then retry.`,
+      {
+        provider: "ieee",
+        blockerType: "captcha",
+        instructions: [
+          "Use the browser window that just came to the foreground.",
+          "Wait for any IEEE / Imperva challenge to finish, or complete it manually if prompted.",
+          "If needed, rerun the search manually until the normal results page loads instead of the unavailable-load page.",
+          "Once the results page looks normal, retry the same MCP action in this same session.",
+        ],
+      },
+    );
+  }
+
+  private async readPageSignals(context: ProviderContext): Promise<IeeePageSignals> {
+    return context.page.evaluate(
+      ({ queryInputs, exportButtons }) => {
+        const bodyText = document.body.innerText;
+        const title = document.title;
+        const url = location.href;
+        const institution = /Access provided by:\s*([^\n]+)/i.exec(bodyText)?.[1]?.trim() ?? null;
+        const onAdvancedSearchPage = /\/search\/advanced(?:\/command)?(?:[/?#]|$)/i.test(url);
+        const onResultsPage = /\/search\/searchresult\.jsp(?:[/?#]|$)/i.test(url) || /Search Results/i.test(title);
+        const hasVisibleQueryInput = queryInputs.some((selector) =>
+          Array.from(document.querySelectorAll(selector)).some(
+            (node) =>
+              node instanceof HTMLElement &&
+              (node.offsetWidth > 0 || node.offsetHeight > 0 || node.getClientRects().length > 0),
+          ),
+        );
+        const hasVisibleExportButton = exportButtons.some((selector) =>
+          Array.from(document.querySelectorAll(selector)).some(
+            (node) =>
+              node instanceof HTMLElement &&
+              (node.offsetWidth > 0 || node.offsetHeight > 0 || node.getClientRects().length > 0),
+          ),
+        );
+        const hasResultCards = document.querySelectorAll("xpl-results-item").length > 0;
+        const hasSearchSummary = Boolean(document.querySelector("xpl-search-dashboard .Dashboard-header, xpl-search-dashboard h1"));
+        const hasErrorCode418 = /Error Code:\s*418\b/i.test(bodyText);
+        const hasUnavailableLoadPage =
+          /Unable to Load Page|Unavailable to Load/i.test(title) ||
+          /Unable to Load Page|Unavailable to Load/i.test(bodyText);
+        const hasErrorPage = hasUnavailableLoadPage || hasErrorCode418;
+
+        return {
+          url,
+          title,
+          bodyText,
+          institution,
+          onAdvancedSearchPage,
+          onResultsPage,
+          hasVisibleQueryInput,
+          hasVisibleExportButton,
+          hasResultCards,
+          hasSearchSummary,
+          hasErrorPage,
+          hasErrorCode418,
+        };
+      },
+      {
+        queryInputs: this.selectors.queryInputs,
+        exportButtons: this.selectors.exportButtons,
+      },
+    );
   }
 }
 

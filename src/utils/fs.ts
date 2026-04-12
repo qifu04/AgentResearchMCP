@@ -34,10 +34,27 @@ export async function writeTextFile(targetPath: string, content: string): Promis
   await writeFile(targetPath, content, "utf8");
 }
 
+export function ensureTimestampedFileName(fileName: string, timestamp = Date.now()): string {
+  const parsed = path.parse(fileName);
+  if (hasTimestampSuffix(parsed.name)) {
+    return fileName;
+  }
+
+  return path.format({
+    dir: parsed.dir,
+    ext: parsed.ext,
+    name: `${parsed.name}-${timestamp}`,
+  });
+}
+
 export async function removePath(targetPath: string): Promise<void> {
   if (!(await pathExists(targetPath))) {
     return;
   }
 
   await rm(targetPath, { recursive: true, force: true });
+}
+
+function hasTimestampSuffix(value: string): boolean {
+  return /-\d{13}$/.test(value);
 }

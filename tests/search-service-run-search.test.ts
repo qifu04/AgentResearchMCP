@@ -2,6 +2,7 @@
 import { SessionLock } from "../src/core/session-lock.js";
 import type { SessionManager } from "../src/core/session-manager.js";
 import type { SearchProviderAdapter } from "../src/adapters/provider-contract.js";
+import { ManualInterventionRequiredError } from "../src/core/manual-intervention.js";
 import { SearchService } from "../src/services/search-service.js";
 import type { SessionRecord } from "../src/types/session.js";
 
@@ -10,6 +11,7 @@ function createHarness(currentQuery: string | null) {
   const page = {
     waitForLoadState: vi.fn(async () => undefined),
     url: vi.fn(() => "about:blank"),
+    bringToFront: vi.fn(async () => undefined),
   } as any;
 
   const record: SessionRecord = {
@@ -233,5 +235,22 @@ describe("SearchService.runSearch", () => {
     expect(adapter.readCurrentQuery).toHaveBeenCalledOnce();
     expect(adapter.setCurrentQuery).not.toHaveBeenCalled();
     expect(calls).toEqual(["readCurrentQuery", "submitSearch"]);
+  });
+
+  it("marks the session as awaiting manual intervention when the provider is blocked", async () => {
+    const { service, adapter } = createHarness('"machine learning"');
+    adapter.submitSearch = vi.fn(async () => {
+      throw new ManualInterventionRequiredError("IEEE Xplore triggered anti-bot protection.", {
+        provider: "ieee",
+        blockerType: "captcha",
+      });
+    });
+
+    await expect(service.runSearch("session-1")).rejects.toThrow(/anti-bot protection/i);
+    expect((service as any).sessionManager.setPhase).toHaveBeenCalledWith(
+      "session-1",
+      "awaiting_manual_intervention",
+      "IEEE Xplore triggered anti-bot protection.",
+    );
   });
 });
